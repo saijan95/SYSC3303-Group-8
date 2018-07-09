@@ -1,8 +1,0 @@
-import java.net.DatagramPacket;
-
-public class DatagramPacketBuilder {
-	public static DatagramPacket getReceivalbeDatagram() {
-		byte[] receiveBytes = new byte[NetworkConfig.DATAGRAM_PACKET_MAX_LEN];
-		return new DatagramPacket(receiveBytes, receiveBytes.length);
-	}
-}
