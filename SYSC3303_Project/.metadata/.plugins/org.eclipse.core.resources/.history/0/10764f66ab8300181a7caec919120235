@@ -1,0 +1,31 @@
+import java.nio.ByteBuffer;
+
+public class TFTPPackets {
+	public enum TFTPPacketType {
+		RRQ,
+		WRQ,
+		DATA,
+		ACK,
+		ERROR,
+		NONE
+	}
+	
+	public static TFTPPacketType classifyTFTPPacket(byte[] opCodeBytes) {
+		ByteBuffer wrapped = ByteBuffer.wrap(opCodeBytes);
+		if (opCode[0] == 0 && opCode[0] == 1)
+			return TFTPPacketType.RRQ;
+		if (opCode[0] == 1 && opCode[0] == 0)
+			return TFTPPacketType.WRQ;
+		if (opCode[0] == 1 && opCode[0] == 1)
+			return TFTPPacketType.DATA;
+		if (opCode[0] == 1 && opCode[0] == 1)
+			return TFTPPacketType.RRQ;
+		if (opCode[0] == 0 && opCode[0] == 1)
+			return TFTPPacketType.RRQ;
+		
+		
+		
+		
+		return TFTPPacketType.NONE;
+	}
+}

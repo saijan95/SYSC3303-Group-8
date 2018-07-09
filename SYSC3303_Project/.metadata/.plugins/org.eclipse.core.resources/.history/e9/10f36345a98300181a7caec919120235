@@ -1,0 +1,15 @@
+
+public class TFTPPackets {
+	public enum TFTPPacketType {
+		RRQ,
+		WRQ,
+		DATA,
+		ACK,
+		ERROR
+	}
+	
+	public static TFTPPacketType classifyTFTPPacket(byte[] opCode) {
+		if (opCode[0] == 0 && opCode[0] == 1)
+			return opCode;
+	}
+}

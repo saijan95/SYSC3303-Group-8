@@ -1,0 +1,9 @@
+
+public class NetworkConfig {
+	/**
+	 * This class contains the network configuration settings
+	 */
+	
+	public static final int SERVER_PORT = 6000;
+	public static final int DATAGRAM_PACKET_MAX_LEN = 100;
+}

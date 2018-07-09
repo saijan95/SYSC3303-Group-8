@@ -1,0 +1,4 @@
+
+public class NetworkConfig {
+	public static final int SERVER_PORT = 69;
+}

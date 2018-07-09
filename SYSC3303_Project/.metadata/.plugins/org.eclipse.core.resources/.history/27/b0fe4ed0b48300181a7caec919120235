@@ -1,0 +1,6 @@
+
+public class Globals {
+	public static String getErrorMessage(String className, String message) {
+		return new String(String.format("ERROR: %s - %s", className, message));
+	}
+}

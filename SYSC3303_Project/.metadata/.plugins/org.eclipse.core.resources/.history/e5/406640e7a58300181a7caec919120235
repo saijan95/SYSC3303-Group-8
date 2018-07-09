@@ -1,0 +1,6 @@
+
+public class WRQServerThread extends Thread {
+	public WRQServerThread() {
+		
+	}
+}

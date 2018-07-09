@@ -1,0 +1,7 @@
+import java.net.DatagramPacket;
+
+public class RRQServerThread extends Thread {
+	public RRQServerThread(DatagramPacket receivedDatagramPacket) {
+		
+	}
+}

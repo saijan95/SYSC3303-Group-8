@@ -1,0 +1,19 @@
+
+public class Globals {
+	/**
+	 * This class contains any methods that need to be globally accessed by all classes
+	 */
+	
+	public static String getErrorMessage(String className, String message) {
+		/**
+		* Returns a formatted error message
+		* 
+		* @params className: name of the class where the error occured in 
+		* @params message: error message
+		*
+		* @return TFTPPacket type
+		*/
+		
+		return new String(String.format("ERROR: %s - %s", className, message));
+	}
+}

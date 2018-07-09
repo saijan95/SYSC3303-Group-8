@@ -1,0 +1,28 @@
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.SocketException;
+
+public class RRQServerThread extends Thread {
+	private DatagramSocket datagramSocket;
+	private DatagramPacket receivedDatagramPacket;
+	
+	public RRQServerThread(DatagramPacket receivedDatagramPacket) {
+		this.receivedDatagramPacket = receivedDatagramPacket;
+		
+		try {
+			// create a datagram socket to carry on file transfer operation
+			datagramSocket = new DatagramSocket(NetworkConfig.SERVER_PORT);
+		} catch (SocketException e) {
+			System.err.println(Globals.getErrorMessage("RRQServerThread", "cannot create datagram socket on specified port"));
+			e.printStackTrace();
+		}
+	}
+	
+	public void run() {
+		sendMessage();
+	}
+	
+	private void sendMessage() {
+		DatagramPacket ackPacket = DatagramPacketBuilder.getDATADatagram((short) 0, {} ,receivedDatagramPacket.getSocketAddress());
+	}
+}

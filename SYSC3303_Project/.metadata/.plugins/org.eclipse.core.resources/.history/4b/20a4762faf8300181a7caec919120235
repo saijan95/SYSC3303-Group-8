@@ -1,0 +1,23 @@
+import java.net.DatagramPacket;
+
+public class DatagramPacketBuilder {
+	
+	public static DatagramPacket getReceivalbeDatagram() {
+		// returns an empty datagram packet for receiving data.
+		byte[] receiveBytes = new byte[NetworkConfig.DATAGRAM_PACKET_MAX_LEN];
+		return new DatagramPacket(receiveBytes, receiveBytes.length);
+	}
+	
+	public static DatagramPacket getDATADatagram() {
+		short byteCode = 3;
+		byte[] opCodeBytes = byte[2];
+		et[0] = (byte)(x & 0xff);
+		ret[1] = (byte)((x >> 8) & 0xff);
+		
+		
+	}
+	
+	public static DatagramPacket getACKDatagram() {
+		
+	}
+}

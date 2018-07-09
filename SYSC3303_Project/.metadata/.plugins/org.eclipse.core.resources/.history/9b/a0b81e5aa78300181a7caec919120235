@@ -1,0 +1,5 @@
+
+public class NetworkConfig {
+	public static final int SERVER_PORT = 69;
+	public static final int DATAGRAMPACKET_MAX_LEN = 100;
+}

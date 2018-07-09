@@ -1,0 +1,10 @@
+
+public class TFTPPackets {
+	public enum TFTPPacketType {
+		RRQ,
+		WRQ,
+		DATA,
+		ACK,
+		ERROR
+	}
+}
