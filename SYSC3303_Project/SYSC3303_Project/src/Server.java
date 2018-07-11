@@ -4,6 +4,8 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Scanner;
 
 public class Server implements Runnable {
@@ -11,10 +13,9 @@ public class Server implements Runnable {
 	 * This class represents a server.
 	 * It is used to accept incoming WRQ or RRQ requests 
 	 */
-	
-	
 	private boolean online;
 	private DatagramSocket datagramSocket;
+	private FileManager fileManager;
 	
 	public Server() {
 		try {
@@ -25,13 +26,104 @@ public class Server implements Runnable {
 			System.err.println(Globals.getErrorMessage("Server", "cannot create datagram socket on specified port"));
 			e.printStackTrace();
 		}
+		
+		fileManager = new FileManager();
 	}
 	
 	public void run() {
 		listen();
 	}
 	
-	public void listen() {
+	private String getFileName(byte[] wrqBytes) {
+		int fileNameBytesLength =  0;
+		for(int i = 2; i < wrqBytes.length; i++) {
+			if (wrqBytes[i] == 0) {
+				break;
+			}
+			
+			fileNameBytesLength++;
+		}
+		
+		byte[] fileNameBytes = Arrays.copyOfRange(wrqBytes, 2, 2 + fileNameBytesLength);
+		
+		return new String(fileNameBytes, StandardCharsets.UTF_8);
+	}
+	
+	private byte[] getFileData(byte[] dataPacketBytes) {
+		return Arrays.copyOfRange(dataPacketBytes, 4, dataPacketBytes.length);
+	}
+	
+	private void handleReadRequest(DatagramPacket request) {
+		// creates an DATA packet for response to RRQ
+		String fileName = getFileName(request.getData());
+		byte[] file = fileManager.readFile(fileName);
+		DatagramPacket dataPacket = DatagramPacketBuilder.getDATADatagram((short) 0, file, request.getSocketAddress());
+		
+		System.out.println(Globals.getVerboseMessage("RRQServerThread", 
+				String.format("sending DATA packet to client %s", dataPacket.getAddress())));
+		try {
+			datagramSocket.send(dataPacket);
+		} catch (IOException e) {
+			System.err.println(Globals.getErrorMessage("RRQServerThread", "cannot send DATA packet"));
+			e.printStackTrace();
+			System.exit(-1);
+		}
+	}
+	
+	private void handleWriteRequest(DatagramPacket request) {
+		// creates an ACK packet for response to WRQ
+		DatagramPacket ackPacket = DatagramPacketBuilder.getACKDatagram((short) 0, request.getSocketAddress());
+		
+		System.out.println(Globals.getVerboseMessage("WRQServerThread", 
+				String.format("sending ACK packet to client %s", request.getSocketAddress())));
+		
+		// sends acknowledgement
+		try {
+			datagramSocket.send(ackPacket);
+		} catch (IOException e) {
+			System.err.println(Globals.getErrorMessage("WRQServerThread", "cannot send DATA packet"));
+			e.printStackTrace();
+			System.exit(-1);
+		}
+		
+		System.out.println(Globals.getVerboseMessage("WRQServerThread", 
+				String.format("waiting for DATA packet from client %s", request.getSocketAddress())));
+		
+		// receives data packet from client
+		DatagramPacket receviableDatagramPacket = DatagramPacketBuilder.getReceivalbeDatagram();
+		try {
+			datagramSocket.receive(receviableDatagramPacket);
+		} catch (IOException e) {
+			System.err.println(Globals.getErrorMessage("WRQServerThread", "cannot receive DATA packet"));
+			e.printStackTrace();
+			System.exit(-1);
+		}
+		
+		System.out.println(Globals.getVerboseMessage("WRQServerThread", 
+				String.format("received DATA packet from client %s", request.getSocketAddress())));
+		
+		String fileName = getFileName(request.getData());
+		byte[] data = getFileData(receviableDatagramPacket.getData());
+		fileManager.writeFile(fileName, data);
+		
+		System.out.println(Globals.getVerboseMessage("WRQServerThread", String.format("finsihed writing data to file %s", fileName)));
+		
+		
+		System.out.println(Globals.getVerboseMessage("WRQServerThread", 
+				String.format("sending ACK packet to client %s", request.getSocketAddress())));
+		
+		// sends acknowledgement
+		try {
+			datagramSocket.send(ackPacket);
+		} catch (IOException e) {
+			System.err.println(Globals.getErrorMessage("WRQServerThread", "cannot send ACK packet"));
+			e.printStackTrace();
+			System.exit(-1);
+		}
+		
+	}
+	
+	private void listen() {
 		online = true;
 		
 		while (online) {
@@ -55,14 +147,12 @@ public class Server implements Runnable {
 				TFTPPackets.TFTPPacketType packetType = TFTPPackets.classifyTFTPPacket(opCodeBytes);
 				
 				if (packetType == TFTPPackets.TFTPPacketType.RRQ) {
-					// create a RRQ server thread and pass the received datagram packet
-					RRQServerThread thread = new RRQServerThread(receiveDatagramPacket);
-					thread.start();
+					System.out.println(Globals.getVerboseMessage("Server", "RRQ request recevied."));
+					handleReadRequest(receiveDatagramPacket);
 				}
 				else if (packetType == TFTPPackets.TFTPPacketType.WRQ) {
-					// create a WRQ server thread and pass the received datagram packet
-					WRQServerThread thread = new WRQServerThread(receiveDatagramPacket);
-					thread.start();
+					System.out.println(Globals.getVerboseMessage("Server", "WRQ request received."));
+					handleWriteRequest(receiveDatagramPacket);
 				}
 			}
 		}
@@ -118,14 +208,17 @@ public class Server implements Runnable {
 		selection = sc.nextInt();
 		
 		if (selection == 1) {
+			// create server a thread for it listen on
 			server = new Server();
 			serverThread = new Thread(server);
 			serverThread.start();
 		}
 		else {
+			sc.close();
 			System.exit(0);
 		}
 		
+		// shuttdown option
 		selection = 0;
 		while (selection != 1) {
 			System.out.println("\nSYSC 3033 TFTP Server");
@@ -137,6 +230,7 @@ public class Server implements Runnable {
 		
 		if (selection == 1) {
 			server.shutdown();
+			sc.close();
 			try {
 				serverThread.join(1000);
 			} catch (InterruptedException e) {
