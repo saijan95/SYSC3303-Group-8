@@ -2,25 +2,31 @@ import java.io.*;
 import java.net.*;
 import java.util.Scanner;
 
-public class ErrorSimulator {
+public class ErrorSimulator implements Runnable {
+	/**
+	 * This class represents the error simulator
+	 */
 	
 	private boolean online;
-	private DatagramSocket receiveSocket, sendAndReceiveSocket;
-	private DatagramPacket sendServerPacket, sendClientPacket;
+	private DatagramSocket sendAndReceiveSocket;
 	
 	public ErrorSimulator() {
 		try {
 			// create a datagram socket to establish a connection with incoming
 			// RRQ and WRQ connections
-			receiveSocket = new DatagramSocket(NetworkConfig.PROXY_PORT);
-			sendAndReceiveSocket = new DatagramSocket();
+			//receiveSocket = new DatagramSocket(NetworkConfig.PROXY_PORT);
+			sendAndReceiveSocket = new DatagramSocket(NetworkConfig.PROXY_PORT);
 		} catch (SocketException e) {
 			System.err.println(Globals.getErrorMessage("Error Simulator", "cannot create datagram socket on specified port"));
 			e.printStackTrace();
 		}
 	}
 	
-	public void listen() {
+	public void run() {
+		listen();
+	}
+	
+	private void listen() {
 		online = true;
 		
 		while (online) {
@@ -29,7 +35,7 @@ public class ErrorSimulator {
 			DatagramPacket receiveClientDatagramPacket = DatagramPacketBuilder.getReceivalbeDatagram();
 			System.out.println(Globals.getVerboseMessage("Error Simulator", "waiting for packet from client..."));
 			try {
-				receiveSocket.receive(receiveClientDatagramPacket);
+				sendAndReceiveSocket.receive(receiveClientDatagramPacket);
 			} catch (IOException e) {
 				System.err.println(Globals.getErrorMessage("Error Simulator", "cannot receive packages"));
 				e.printStackTrace();
@@ -39,8 +45,9 @@ public class ErrorSimulator {
 			
 			// Send packet to Server
 			byte[] receiveDataBytes = receiveClientDatagramPacket.getData();
+			DatagramPacket sendServerDatagramPacket = null;
 			try {
-				sendServerPacket = new DatagramPacket(receiveDataBytes, receiveDataBytes.length, 
+				sendServerDatagramPacket = new DatagramPacket(receiveDataBytes, receiveDataBytes.length, 
 					InetAddress.getLocalHost(), NetworkConfig.SERVER_PORT);
 			} catch (UnknownHostException e) {
 				System.out.print("Unknown Host Exception: likely:");
@@ -48,17 +55,16 @@ public class ErrorSimulator {
 				e.printStackTrace();
 				System.exit(1);
 			}
-			System.out.println(Globals.getVerboseMessage("Error Simulator", "sending packet to server..."));
 			
+			System.out.println(Globals.getVerboseMessage("Error Simulator", "sending packet to server..."));
 			try {
-				sendAndReceiveSocket.send(sendServerPacket);
+				sendAndReceiveSocket.send(sendServerDatagramPacket);
 			} catch (IOException e) {
 				System.err.println(Globals.getErrorMessage("Error Simulator", "cannot send packages"));
 				e.printStackTrace();
 				System.exit(-1);
 			}
-			
-			
+					
 			// Receive packet from Server
 			DatagramPacket receiveServerDatagramPacket = DatagramPacketBuilder.getReceivalbeDatagram();
 			System.out.println(Globals.getVerboseMessage("Error Simulator", "waiting for packet from server..."));
@@ -70,11 +76,11 @@ public class ErrorSimulator {
 				System.exit(-1);
 			}
 			
-			
 			// Send packet to Client
 			receiveDataBytes = receiveServerDatagramPacket.getData();
+			DatagramPacket sendClientDatagramPacket = null;
 			try {
-				sendClientPacket = new DatagramPacket(receiveDataBytes, receiveDataBytes.length, 
+				sendClientDatagramPacket = new DatagramPacket(receiveDataBytes, receiveDataBytes.length, 
 					InetAddress.getLocalHost(), receiveClientDatagramPacket.getPort());
 			} catch (UnknownHostException e) {
 				System.out.print("Unknown Host Exception: likely:");
@@ -82,19 +88,17 @@ public class ErrorSimulator {
 				e.printStackTrace();
 				System.exit(1);
 			}
-			System.out.println(Globals.getVerboseMessage("Error Simulator", "sending packet to client..."));
 			
+			System.out.println(Globals.getVerboseMessage("Error Simulator", "sending packet to client..."));
 			try {
-				sendAndReceiveSocket.send(sendClientPacket);
+				sendAndReceiveSocket.send(sendClientDatagramPacket);
 			} catch (IOException e) {
 				System.err.println(Globals.getErrorMessage("Error Simulator", "cannot send packages"));
 				e.printStackTrace();
 				System.exit(-1);
 			}
-			
 		}
 		
-		receiveSocket.close();
 		sendAndReceiveSocket.close();
 	}
 	
@@ -102,7 +106,7 @@ public class ErrorSimulator {
 		System.out.println(Globals.getVerboseMessage("Error Simulator", "shutting down..."));
 		online = false;
 				
-		// wait for any connections that are to be classified
+		// wait for any packets to be replayed
 		try {
 			Thread.sleep(1000);
 		} catch (InterruptedException e) {
@@ -111,11 +115,12 @@ public class ErrorSimulator {
 			System.exit(-1);
 		}
 		
-		if ((!receiveSocket.isClosed()) && (!sendAndReceiveSocket.isClosed())) {
+		if (!sendAndReceiveSocket.isClosed()) {
 			// temporary socket is created to send a decoy package to the server so that it can stop listening
 			// therefore once it re-evaluates that the boolean online is false it will exit
 			try {
 				DatagramSocket shutdownClient = new DatagramSocket();
+				shutdownClient.send(new DatagramPacket(new byte[0], 0, InetAddress.getLocalHost(), NetworkConfig.PROXY_PORT));
 				shutdownClient.send(new DatagramPacket(new byte[0], 0, InetAddress.getLocalHost(), NetworkConfig.PROXY_PORT));
 				shutdownClient.close();
 			} catch (UnknownHostException e) {
@@ -134,6 +139,7 @@ public class ErrorSimulator {
 	
 	public static void main(String[] args) {
 		ErrorSimulator proxy = null;
+		Thread proxyThread = null;
 		
 		System.out.println("\nSYSC 3033 TFTP Error Simulator");
 		System.out.println("1. Start");
@@ -145,13 +151,17 @@ public class ErrorSimulator {
 		selection = sc.nextInt();
 		
 		if (selection == 1) {
+			// create server a thread for it listen on
 			proxy = new ErrorSimulator();
-			proxy.listen();
+			proxyThread = new Thread(proxy);
+			proxyThread.start();
 		}
 		else {
+			sc.close();
 			System.exit(0);
 		}
 		
+		// shutdown option
 		selection = 0;
 		while (selection != 1) {
 			System.out.println("\nSYSC 3033 TFTP Server");
@@ -162,7 +172,15 @@ public class ErrorSimulator {
 		}
 		
 		if (selection == 1) {
+			sc.close();
 			proxy.shutdown();
+			try {
+				proxyThread.join();
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				System.exit(-1);
+			}
 		}
 	}
 }
