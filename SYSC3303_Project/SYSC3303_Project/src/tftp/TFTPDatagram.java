@@ -2,6 +2,7 @@ package tftp;
 
 import java.net.DatagramPacket;
 import java.net.InetAddress;
+import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 
 public class TFTPDatagram implements TFTPPacket {
@@ -27,11 +28,45 @@ public class TFTPDatagram implements TFTPPacket {
 		backing.setAddress(host);
 		backing.setPort(port);
 	}
+	
+		
+	/**
+	 * Set the payload field for multiple packet types.
+	 * also sets the backing DatagramPacket length to the end of the payload,
+	 * as payload is always the last field in a TFTP packet
+	 * @param offset
+	 * @param pld
+	 */
+	private void setOffsetPayload(int offset, byte[] pld) throws TFTPPacketException {
+		
+		try {
+			body.put(pld, offset, pld.length);		// place the payload into the packet 
+			backing.setLength(body.position());		// set the packet length to the end of the payload
+		} catch (BufferOverflowException be) {
+			throw new TFTPPacketException("Payload too big");
+		}
+		
+	}
 
 	@Override
 	public void setPayload(byte[] pld) throws TFTPPacketException {
-		// TODO Auto-generated method stub
-		
+			
+		switch (getType()) {
+		case RRQ:
+			setOffsetPayload(2, pld);
+			break;
+		case WRQ:
+			setOffsetPayload(2, pld);
+			break;
+		case DATA:
+			setOffsetPayload(4, pld);
+			break;
+		case ERROR:
+			setOffsetPayload(4, pld);
+			break;
+		default:
+			throw new TFTPPacketException("Cannot set payload for this packet type");
+		}
 	}
 	
 	/**
@@ -78,8 +113,18 @@ public class TFTPDatagram implements TFTPPacket {
 	}
 
 	@Override
-	public void setParameter(short param) {
-		body.putShort(2, param);
+	public void setParameter(short param) throws TFTPPacketException {
+		switch(getType()) {
+		case RRQ:
+			throw new TFTPPacketException("Parameter not defined for RRQ packets");
+		case WRQ:
+			throw new TFTPPacketException("Parameter not defined for WRQ packets");
+		case NONE:
+			throw new TFTPPacketException("Parameter not defined for this packet type");
+		default:
+			body.putShort(2, param);
+			break;
+		}
 
 	}
 
@@ -115,5 +160,12 @@ public class TFTPDatagram implements TFTPPacket {
 			return TFTPPacketType.NONE;
 		}
 	}
-
+	
+	/**
+	 * Returns the DatagramPacket object backing this TFTPDatagram
+	 * @return
+	 */
+	public DatagramPacket getBackingDP() {
+		return backing;
+	}
 }

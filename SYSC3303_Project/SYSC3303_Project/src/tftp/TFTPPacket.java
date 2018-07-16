@@ -39,7 +39,7 @@ public interface TFTPPacket {
 	 * Not valid for RRQ or WRQ packets
 	 * @param param
 	 */
-	public void setParameter(short param);
+	public void setParameter(short param) throws TFTPPacketException;
 	
 	/**
 	 * Not valid for RRQ/WRQ packets
