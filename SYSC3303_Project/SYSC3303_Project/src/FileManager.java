@@ -6,23 +6,25 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+/**
+ * This class provides an interface for objects to write or read files from hard drive
+ * 
+ * @author Group 8
+ */
+
 public class FileManager {
+
+	public FileManager() {}
+	
 	/**
-	 * This class provides an interface for objects to write or read files from harddrive
+	 * Read file from hard dive and return data in list of bytes
+	 * 
+	 * @param fileName: fileName
+	 * 
+	 * Return list of bytes 
 	 */
-	
-	public FileManager() {
-		
-	}
-	
 	public byte[] readFile(String fileName) {
-		/**
-		 * Read file from harddive and return data in list of bytes
-		 * 
-		 * @param fileName: fileName
-		 * 
-		 * Return list of bytes 
-		 */
+
 		
 		Path path = Paths.get(fileName);
 		
@@ -39,13 +41,13 @@ public class FileManager {
 		return fileBytes;
 	}
 	
-	public void writeFile(String fileName, byte[] data) {
-		/**
-		 * Writes file data in bytes to a harddrive with the given file name
-		 * 
-		 * @param fileName: file name
-		 * @param data: file data in byte form
-		 */
+	/**
+	 * Writes file data in bytes to a harddrive with the given file name
+	 * 
+	 * @param fileName: file name
+	 * @param data: file data in byte form
+	 */
+	public void writeFile(String fileName, int blockNumber, byte[] data) {
 		File file = new File(fileName);
 		
 		// create a new file if it does not exist
@@ -59,7 +61,7 @@ public class FileManager {
 		
 		// write to file
 		try {
-			FileOutputStream fileOutputStream = new FileOutputStream(file);
+			FileOutputStream fileOutputStream = new FileOutputStream(file, true);
 			fileOutputStream.write(data);
 			fileOutputStream.close();
 		} catch (FileNotFoundException e) {
