@@ -10,7 +10,18 @@ public class ErrorSimulator implements Runnable {
 	private boolean online;
 	private DatagramSocket sendAndReceiveSocket;
 	
+	private InetAddress serverAddress;
+	private int serverPort;
+	
 	public ErrorSimulator() {
+		try {
+			serverAddress = InetAddress.getLocalHost();
+			serverPort = NetworkConfig.SERVER_PORT;
+		} catch (UnknownHostException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		
 		try {
 			// create a datagram socket to establish a connection with incoming
 			// RRQ and WRQ connections
@@ -42,13 +53,37 @@ public class ErrorSimulator implements Runnable {
 				System.exit(-1);
 			}
 			
+			TFTPPacket tftpPacket = null;
+			try {
+				tftpPacket = new TFTPPacket(receiveClientDatagramPacket.getData());
+			} catch (TFTPPacketParsingError e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+			if (tftpPacket.getPacketType() == TFTPPacketType.RRQ || 
+					tftpPacket.getPacketType() == TFTPPacketType.RRQ) {
+				try {
+					serverAddress = InetAddress.getLocalHost();
+				} catch (UnknownHostException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				serverPort = NetworkConfig.SERVER_PORT;
+			}
 			
 			// Send packet to Server
 			byte[] receiveDataBytes = receiveClientDatagramPacket.getData();
+			/*
+			if (receiveDataBytes[0] == 0) {
+				online = false;
+				continue;
+			}
+			*/
+			
 			DatagramPacket sendServerDatagramPacket = null;
 			try {
 				sendServerDatagramPacket = new DatagramPacket(receiveDataBytes, receiveDataBytes.length, 
-					InetAddress.getLocalHost(), NetworkConfig.SERVER_PORT);
+					InetAddress.getLocalHost(), serverPort);
 			} catch (UnknownHostException e) {
 				System.out.print("Unknown Host Exception: likely:");
 				System.out.println("Packet failed to create.\n" + e);
@@ -78,6 +113,16 @@ public class ErrorSimulator implements Runnable {
 			
 			// Send packet to Client
 			receiveDataBytes = receiveServerDatagramPacket.getData();
+			/*
+			if (receiveDataBytes[0] == 0) {
+				online = false;
+				continue;
+			}
+			*/
+			
+			serverAddress = ((InetSocketAddress) receiveServerDatagramPacket.getSocketAddress()).getAddress();
+			serverPort = ((InetSocketAddress) receiveServerDatagramPacket.getSocketAddress()).getPort();
+			
 			DatagramPacket sendClientDatagramPacket = null;
 			try {
 				sendClientDatagramPacket = new DatagramPacket(receiveDataBytes, receiveDataBytes.length, 
@@ -97,6 +142,7 @@ public class ErrorSimulator implements Runnable {
 				e.printStackTrace();
 				System.exit(-1);
 			}
+					
 		}
 		
 		sendAndReceiveSocket.close();
@@ -104,8 +150,7 @@ public class ErrorSimulator implements Runnable {
 	
 	public void shutdown() {
 		System.out.println(Globals.getVerboseMessage("Error Simulator", "shutting down..."));
-		online = false;
-				
+		
 		// wait for any packets to be replayed
 		try {
 			Thread.sleep(1000);
@@ -120,8 +165,7 @@ public class ErrorSimulator implements Runnable {
 			// therefore once it re-evaluates that the boolean online is false it will exit
 			try {
 				DatagramSocket shutdownClient = new DatagramSocket();
-				shutdownClient.send(new DatagramPacket(new byte[0], 0, InetAddress.getLocalHost(), NetworkConfig.PROXY_PORT));
-				shutdownClient.send(new DatagramPacket(new byte[0], 0, InetAddress.getLocalHost(), NetworkConfig.PROXY_PORT));
+				shutdownClient.send(DatagramPacketBuilder.getShutdownDatagram(InetAddress.getLocalHost(), NetworkConfig.PROXY_PORT));
 				shutdownClient.close();
 			} catch (UnknownHostException e) {
 				System.err.println(Globals.getErrorMessage("Error Simulator", "cannot find localhost address."));
