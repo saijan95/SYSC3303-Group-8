@@ -6,14 +6,14 @@ import java.net.InetAddress;
 
 public class FileSender {
 	
-	private DatagramSocket 	fileSocket;
+	private TFTPSocket 	fileSocket;
 	private InetAddress 	remoteHost;
 	private int				remotePort;
 	private FileInputStream	file;
 	
 	private byte[] buffer;
 	
-	public FileSender(String path, InetAddress dest, int port, DatagramSocket sock) throws FileNotFoundException {
+	public FileSender(String path, InetAddress dest, int port, TFTPSocket sock) throws FileNotFoundException {
 		fileSocket = sock;
 		remoteHost = dest;
 		remotePort = port;
@@ -27,8 +27,7 @@ public class FileSender {
 		
 	}
 	
-	private void sendNextData() {
-		
+	private void sendData(short blockNum) {
 	}
 	
 

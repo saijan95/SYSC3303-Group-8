@@ -172,6 +172,29 @@ public class TFTPDatagram implements TFTPPacket {
 	}
 	
 	
+	public void setType(TFTPPacketType type) throws TFTPPacketException {
+		
+		switch(type) {
+		case RRQ:
+			setOpcode((short) 1);
+			break;
+		case WRQ:
+			setOpcode((short) 2);
+			break;
+		case DATA:
+			setOpcode((short) 3);
+			break;
+		case ACK:
+			setOpcode((short) 4);
+			break;
+		case ERROR:
+			setOpcode((short) 5);
+			break;
+		default:
+			throw new TFTPPacketException("Cannot create an invalid TFTP packet");
+		}
+	}
+	
 	/**
 	 * Returns the DatagramPacket object backing this TFTPDatagram
 	 * @return

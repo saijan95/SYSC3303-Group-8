@@ -53,4 +53,10 @@ public interface TFTPPacket {
 	 */
 	public TFTPPacketType getType();
 	
+	
+	/**
+	 * Set the type of the TFTP packet
+	 * @param type
+	 */
+	public void setType(TFTPPacketType type) throws TFTPPacketException;
 }
