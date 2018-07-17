@@ -10,6 +10,5 @@ public enum TFTPPacketType {
 	DATA,
 	ACK,
 	ERROR,
-	NONE
 }
  

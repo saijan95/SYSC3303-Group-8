@@ -24,8 +24,8 @@ public class DATAPacket extends TFTPPacket {
 	 * @param packetBytes list of bytes that form the packet
 	 * @throws TFTPPacketParsingError
 	 */
-	public DATAPacket(byte[] packetBytes) throws TFTPPacketParsingError {
-		super(packetBytes);
+	public DATAPacket(byte[] packetBytes, int offset, int packetLength) throws TFTPPacketParsingError {
+		super(packetBytes, offset, packetLength);
 		/* parses list of bytes and initializes packet attributes
 		 * 		- block number
 		 * 		- data bytes 
@@ -58,7 +58,7 @@ public class DATAPacket extends TFTPPacket {
 			// not enough bytes to parse data
 			throw new TFTPPacketParsingError("error parsing data");
 		
-		dataBytes = Arrays.copyOfRange(super.packetBytes, 4, super.packetBytes.length);
+		dataBytes = Arrays.copyOfRange(packetBytes, 4, packetBytes.length);
 	}
 	
 	/**

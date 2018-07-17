@@ -8,25 +8,19 @@ public class ErrorSimulator implements Runnable {
 	 */
 	
 	private boolean online;
-	private DatagramSocket sendAndReceiveSocket;
+	private DatagramSocket datagramSocket;
 	
-	private InetAddress serverAddress;
-	private int serverPort;
+	// the port of the server that the client is communicating with
+	private int serverThreadPort;
+	// the port of the client that the server is communicating with
+	private int clientPort;
 	
 	public ErrorSimulator() {
-		try {
-			serverAddress = InetAddress.getLocalHost();
-			serverPort = NetworkConfig.SERVER_PORT;
-		} catch (UnknownHostException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		}
+		serverThreadPort = NetworkConfig.SERVER_PORT;
 		
 		try {
 			// create a datagram socket to establish a connection with incoming
-			// RRQ and WRQ connections
-			//receiveSocket = new DatagramSocket(NetworkConfig.PROXY_PORT);
-			sendAndReceiveSocket = new DatagramSocket(NetworkConfig.PROXY_PORT);
+			datagramSocket = new DatagramSocket(NetworkConfig.PROXY_PORT);
 		} catch (SocketException e) {
 			System.err.println(Globals.getErrorMessage("Error Simulator", "cannot create datagram socket on specified port"));
 			e.printStackTrace();
@@ -37,115 +31,119 @@ public class ErrorSimulator implements Runnable {
 		listen();
 	}
 	
+	private TFTPPacket parseTFTPPacket(byte[] packetBytes, int offset, int packetLength) {
+		// creates a tftp packet with the received bytes
+		TFTPPacket tftpPacket = null;
+		
+		try {
+			tftpPacket = new TFTPPacket(packetBytes, offset, packetLength);
+		} catch (TFTPPacketParsingError e) {
+			System.err.println(Globals.getErrorMessage("Error Simulator", "cannot parse TFTP packet"));
+			e.printStackTrace();
+			System.exit(-1);
+		}
+		
+		return tftpPacket;
+	}
+	
 	private void listen() {
 		online = true;
+		
+		TFTPPacket tftpPacket;
+		byte[] packetBytes;
+		
+		DatagramPacket receivableDatagramPacket;
+		DatagramPacket sendDatagramPacket;
 		
 		while (online) {
 			
 			// Receive packet from Client
-			DatagramPacket receiveClientDatagramPacket = DatagramPacketBuilder.getReceivalbeDatagram();
-			System.out.println(Globals.getVerboseMessage("Error Simulator", "waiting for packet from client..."));
+			receivableDatagramPacket = DatagramPacketBuilder.getReceivalbeDatagram();
+			System.out.println(Globals.getVerboseMessage("Error Simulator", "waiting for packet..."));
 			try {
-				sendAndReceiveSocket.receive(receiveClientDatagramPacket);
+				datagramSocket.receive(receivableDatagramPacket);
 			} catch (IOException e) {
 				System.err.println(Globals.getErrorMessage("Error Simulator", "cannot receive packages"));
 				e.printStackTrace();
 				System.exit(-1);
 			}
 			
-			TFTPPacket tftpPacket = null;
-			try {
-				tftpPacket = new TFTPPacket(receiveClientDatagramPacket.getData());
-			} catch (TFTPPacketParsingError e1) {
-				// TODO Auto-generated catch block
-				e1.printStackTrace();
-			}
+			// creates a tftp packet with the received bytes
+			packetBytes = receivableDatagramPacket.getData();
+			tftpPacket = parseTFTPPacket(packetBytes, receivableDatagramPacket.getOffset(), packetBytes.length);
+			
+			// checks if the incoming packet is a request packet
+			// if so then reset the server port back to the main port
 			if (tftpPacket.getPacketType() == TFTPPacketType.RRQ || 
-					tftpPacket.getPacketType() == TFTPPacketType.RRQ) {
+					tftpPacket.getPacketType() == TFTPPacketType.WRQ) {
+				
+				System.out.println(Globals.getVerboseMessage("Error Simulator", "received packet from client."));
+				
+				// save client address and port
+				clientPort = ((InetSocketAddress) receivableDatagramPacket.getSocketAddress()).getPort();
+				
+				// save server address and port 
+				serverThreadPort = NetworkConfig.SERVER_PORT;
+				
+				System.out.println(Globals.getVerboseMessage("Error Simulator", "sending packet to server..."));
+				
 				try {
-					serverAddress = InetAddress.getLocalHost();
-				} catch (UnknownHostException e) {
-					// TODO Auto-generated catch block
+					sendDatagramPacket = new DatagramPacket(tftpPacket.getPacketBytes(), tftpPacket.getPacketBytes().length, 
+							InetAddress.getLocalHost(), serverThreadPort);
+					
+					datagramSocket.send(sendDatagramPacket);
+				} catch (IOException e) {
+					System.err.println(Globals.getErrorMessage("Error Simulator", "cannot send packages"));
 					e.printStackTrace();
+					System.exit(-1);
+				}	
+				
+				receivableDatagramPacket = DatagramPacketBuilder.getReceivalbeDatagram();
+				System.out.println(Globals.getVerboseMessage("Error Simulator", "waiting for packet from server..."));
+				
+				try {
+					datagramSocket.receive(receivableDatagramPacket);
+				} catch (IOException e) {
+					System.err.println(Globals.getErrorMessage("Error Simulator", "cannot receive packages"));
+					e.printStackTrace();
+					System.exit(-1);
 				}
-				serverPort = NetworkConfig.SERVER_PORT;
+				
+				serverThreadPort = ((InetSocketAddress) receivableDatagramPacket.getSocketAddress()).getPort();
+				
+				// creates a tftp packet with the received bytes
+				packetBytes = receivableDatagramPacket.getData();
+				tftpPacket = parseTFTPPacket(packetBytes, receivableDatagramPacket.getOffset(), packetBytes.length);
 			}
 			
-			// Send packet to Server
-			byte[] receiveDataBytes = receiveClientDatagramPacket.getData();
-			/*
-			if (receiveDataBytes[0] == 0) {
-				online = false;
-				continue;
+			int sendPort = 0;
+			if (((InetSocketAddress) receivableDatagramPacket.getSocketAddress()).getPort() == serverThreadPort) {
+				System.out.println(Globals.getVerboseMessage("Error Simulator", "recieved packet from server."));
+				sendPort = clientPort;
+				
+				System.out.println(Globals.getVerboseMessage("Error Simulator", "sending packet to client..."));
 			}
-			*/
+			else {
+				System.out.println(Globals.getVerboseMessage("Error Simulator", "recieved packet from client."));
+				sendPort = serverThreadPort;
+				
+				System.out.println(Globals.getVerboseMessage("Error Simulator", "sending packet to server..."));
+			}
 			
-			DatagramPacket sendServerDatagramPacket = null;
+			
 			try {
-				sendServerDatagramPacket = new DatagramPacket(receiveDataBytes, receiveDataBytes.length, 
-					InetAddress.getLocalHost(), serverPort);
-			} catch (UnknownHostException e) {
-				System.out.print("Unknown Host Exception: likely:");
-				System.out.println("Packet failed to create.\n" + e);
-				e.printStackTrace();
-				System.exit(1);
-			}
-			
-			System.out.println(Globals.getVerboseMessage("Error Simulator", "sending packet to server..."));
-			try {
-				sendAndReceiveSocket.send(sendServerDatagramPacket);
+				sendDatagramPacket = new DatagramPacket(tftpPacket.getPacketBytes(), receivableDatagramPacket.getLength(), 
+						InetAddress.getLocalHost(), sendPort);
+				
+				datagramSocket.send(sendDatagramPacket);
 			} catch (IOException e) {
 				System.err.println(Globals.getErrorMessage("Error Simulator", "cannot send packages"));
 				e.printStackTrace();
 				System.exit(-1);
-			}
-					
-			// Receive packet from Server
-			DatagramPacket receiveServerDatagramPacket = DatagramPacketBuilder.getReceivalbeDatagram();
-			System.out.println(Globals.getVerboseMessage("Error Simulator", "waiting for packet from server..."));
-			try {
-				sendAndReceiveSocket.receive(receiveServerDatagramPacket);
-			} catch (IOException e) {
-				System.err.println(Globals.getErrorMessage("Error Simulator", "cannot receive packages"));
-				e.printStackTrace();
-				System.exit(-1);
-			}
-			
-			// Send packet to Client
-			receiveDataBytes = receiveServerDatagramPacket.getData();
-			/*
-			if (receiveDataBytes[0] == 0) {
-				online = false;
-				continue;
-			}
-			*/
-			
-			serverAddress = ((InetSocketAddress) receiveServerDatagramPacket.getSocketAddress()).getAddress();
-			serverPort = ((InetSocketAddress) receiveServerDatagramPacket.getSocketAddress()).getPort();
-			
-			DatagramPacket sendClientDatagramPacket = null;
-			try {
-				sendClientDatagramPacket = new DatagramPacket(receiveDataBytes, receiveDataBytes.length, 
-					InetAddress.getLocalHost(), receiveClientDatagramPacket.getPort());
-			} catch (UnknownHostException e) {
-				System.out.print("Unknown Host Exception: likely:");
-				System.out.println("Packet failed to create.\n" + e);
-				e.printStackTrace();
-				System.exit(1);
-			}
-			
-			System.out.println(Globals.getVerboseMessage("Error Simulator", "sending packet to client..."));
-			try {
-				sendAndReceiveSocket.send(sendClientDatagramPacket);
-			} catch (IOException e) {
-				System.err.println(Globals.getErrorMessage("Error Simulator", "cannot send packages"));
-				e.printStackTrace();
-				System.exit(-1);
-			}
-					
+			}		
 		}
 		
-		sendAndReceiveSocket.close();
+		datagramSocket.close();
 	}
 	
 	public void shutdown() {
@@ -160,7 +158,7 @@ public class ErrorSimulator implements Runnable {
 			System.exit(-1);
 		}
 		
-		if (!sendAndReceiveSocket.isClosed()) {
+		if (!datagramSocket.isClosed()) {
 			// temporary socket is created to send a decoy package to the server so that it can stop listening
 			// therefore once it re-evaluates that the boolean online is false it will exit
 			try {

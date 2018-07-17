@@ -8,7 +8,7 @@ import java.util.Scanner;
 
 public class Server implements Runnable {
 	/**
-	 * 1This class represents a server.
+	 * This class represents a server.
 	 * It is used to accept incoming WRQ or RRQ requests 
 	 */
 	private boolean online;
@@ -23,6 +23,7 @@ public class Server implements Runnable {
 			System.err.println(Globals.getErrorMessage("Server", "cannot create datagram socket on specified port"));
 			e.printStackTrace();
 		}
+	
 	}
 	
 	@Override
@@ -60,7 +61,7 @@ public class Server implements Runnable {
 				// classify if the receive datagram packet it RRQ or WRQ
 				TFTPPacket requestPacket = null;
 				try {
-					requestPacket = new TFTPPacket(receiveDataBytes);
+					requestPacket = new TFTPPacket(receiveDataBytes, receiveDatagramPacket.getOffset(), receiveDatagramPacket.getLength());
 				} catch (TFTPPacketParsingError e) {
 					System.err.println(Globals.getErrorMessage("Server", "cannot parse TFTP packet"));
 					e.printStackTrace();

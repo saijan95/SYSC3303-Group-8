@@ -1,14 +1,11 @@
 import java.io.*;
 import java.net.*;
 import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Scanner;
-import java.util.Stack;
 
 /**
- * 
+ * This class represents the client1
  * @author Group 8
  *
  */
@@ -17,6 +14,9 @@ public class Client {
    private DatagramSocket sendReceiveSocket;
    private FileManager fileManager;
 
+   /**
+    * Constructor
+    */
    public Client()
    {
       try {
@@ -30,22 +30,23 @@ public class Client {
          System.exit(-1);
       }
       
-      // class for reading and writing files to harddrive 
+      // class for reading and writing files to hard drive 
       fileManager = new FileManager();
    }
    
+   /**
+    * Makes a read or write request and returns the response packet
+    * 
+    * @param packetType   packet type
+    * @param fileName     name of the file that is requested to be read or written (in bytes)
+    * @param mode         mode (in bytes)
+    * @param ipAddress    server IP address
+    * @param port         server port
+    * 
+    * @Return Datagram packet received from the server after making a RRQ or WRQ request
+    */
    private void makeReadWriteRequest(TFTPPacketType packetType, String fileName, String mode, InetAddress ipAddress, int port) {
-	   /**
-	    * Makes a read or write request and returns the reponse packet
-	    * 
-	    * @param packetType: packet type
-	    * @param fileName: name of the file that is requested to be read or written (in bytes)
-	    * @param mode: mode (in bytes)
-	    * @param ipAddress: server IP address
-	    * @param port: server port
-	    * 
-	    * @Return Datagram packet received from the server after making a RRQ or WRQ request
-	    */
+
 	   DatagramPacket datagramPacket = null;
 	   
 	   if (packetType == TFTPPacketType.RRQ) {
@@ -67,7 +68,18 @@ public class Client {
 	   }
    }
    
+   /**
+    * Handle DATA packets received from server with file data
+    * 
+    * @param filePath  path of the file that the client requests
+    * @param mode      mode of request
+    */
    public void readFile(String filePath, String mode) {
+	   DatagramPacket receiveDatagramPacket;
+	   DatagramPacket sendDatagramPacket;
+	   TFTPPacket tftpPacket;
+	   DATAPacket dataPacket;
+	   
 	   // get file name from file path
 	   String fileName = Paths.get(filePath).getFileName().toString();
 	   
@@ -81,87 +93,84 @@ public class Client {
 		   System.exit(-1);
 	   }
 	   
-	   int fileDataLen = DATAPacket.MAX_DATA_SIZE_BYTES;
-	   while (fileDataLen == DATAPacket.MAX_DATA_SIZE_BYTES) {
-		   DatagramPacket responseDatagramPacket = DatagramPacketBuilder.getReceivalbeDatagram();
+	   	// receive all data packets from server that wants to transfer a file.
+		// once the data length is less than 512 bytes then stop listening for
+		// data packets from the server
+	   int fileDataLen = NetworkConfig.DATAGRAM_PACKET_MAX_LEN;
+	   while (fileDataLen == NetworkConfig.DATAGRAM_PACKET_MAX_LEN) {
+		   // receive datagram packet
+		   receiveDatagramPacket = DatagramPacketBuilder.getReceivalbeDatagram();
 		   
 		   try {
-			   sendReceiveSocket.receive(responseDatagramPacket);
+			   sendReceiveSocket.receive(receiveDatagramPacket);
 		   } catch (IOException e) {
 			   System.err.println(Globals.getErrorMessage("Client", "cannot recieve DATA packet"));
 			   e.printStackTrace();
 			   System.exit(-1);
 		   }
 		   
-		   byte[] responseDataBytes = responseDatagramPacket.getData();
-		   
-		   TFTPPacket tftpPacket = null;
+		   // Parse a TFTPPacket to figure out what kind of packet was received
 		   try {
-			   tftpPacket = new TFTPPacket(responseDataBytes);
+			   tftpPacket = new TFTPPacket(receiveDatagramPacket.getData(), receiveDatagramPacket.getOffset(), receiveDatagramPacket.getLength());
+		   
+			   // check if the received packet is a DATA packet  
+			   if (tftpPacket.getPacketType() == TFTPPacketType.DATA) {
+				   try {
+					   // Parse a data packet
+					   dataPacket = new DATAPacket(receiveDatagramPacket.getData(), receiveDatagramPacket.getOffset(), receiveDatagramPacket.getLength());
+					   
+					   short blockNumber = dataPacket.getBlockNumber();
+					   byte[] fileData = dataPacket.getDataBytes();
+					   
+					   System.out.println(Globals.getVerboseMessage("Client", String.format("received DATA packet %d from server", blockNumber)));
+					   
+					   // gets the data bytes from the DATA packet and converts it into a string
+					   String fileDataStr = ByteConversions.bytesToString(fileData);
+					   
+					   System.out.println(Globals.getVerboseMessage("Client", String.format("received file data: %s", fileDataStr)));
+				   
+					   // save the length of the received packet
+					   fileDataLen = receiveDatagramPacket.getLength();
+					   
+					   // send ACK packet
+					   sendDatagramPacket = DatagramPacketBuilder.getACKDatagram(blockNumber, receiveDatagramPacket.getSocketAddress());
+					   try {
+						   sendReceiveSocket.send(sendDatagramPacket);
+					   } catch (IOException e) {
+						   System.err.println(Globals.getErrorMessage("Client", "cannot send ACK packet to server"));
+						   e.printStackTrace();
+					   }
+					   
+					   System.out.println(Globals.getVerboseMessage("Client", String.format("sent ACK packet %d to server", blockNumber)));
+					   
+				   } catch (TFTPPacketParsingError e) {
+					   System.err.println(Globals.getErrorMessage("Client", "cannot parse DATA Packet"));
+					   e.printStackTrace();
+					   System.exit(-1);
+				   }   
+			   }
+			   else {
+				   // error package
+				   fileDataLen = 0;
+			   }
+			   
 		   } catch (TFTPPacketParsingError e) {
 			   System.err.println(Globals.getErrorMessage("Client", "cannot parse TFTP Packet"));
 			   e.printStackTrace();
 			   System.exit(-1);
 		   }
-		   
-		   if (tftpPacket.getPacketType() == TFTPPacketType.DATA) {
-			   DATAPacket dataPacket = null;
-			   try {
-				   dataPacket = new DATAPacket(responseDataBytes);
-			   } catch (TFTPPacketParsingError e) {
-				   System.err.println(Globals.getErrorMessage("Client", "cannot parse DATA Packet"));
-				   e.printStackTrace();
-				   System.exit(-1);
-			   }
-			   
-			   short blockNumber = dataPacket.getBlockNumber();
-			   byte[] fileData = dataPacket.getDataBytes();
-			   
-			   System.out.println(Globals.getVerboseMessage("Client", String.format("received DATA packet %d from server", blockNumber)));
-			   
-			   // gets the data bytes from the DATA packet and converts it into a string
-			   String fileDataStr = ByteConversions.bytesToString(fileData);
-			   
-			   System.out.println(Globals.getVerboseMessage("Client", String.format("received file data: %s", fileDataStr)));
-		   
-			   fileDataLen = fileData.length;
-			   
-			   DatagramPacket ackDatagramPacket = DatagramPacketBuilder.getACKDatagram(blockNumber, responseDatagramPacket.getSocketAddress());
-			   try {
-				   sendReceiveSocket.send(ackDatagramPacket);
-			   } catch (IOException e) {
-				   System.err.println(Globals.getErrorMessage("Client", "cannot receive ACK packet from server"));
-				   e.printStackTrace();
-			   }
-		   }
-		   else {
-			   // error package
-			   fileDataLen = 0;
-		   }
 	   }
    }
    
-   private Queue<DatagramPacket> getStackOfDATADatagramPackets(byte[] fileData, SocketAddress returnAddress) {
-	   Queue<DatagramPacket> dataPacketStack = new LinkedList<DatagramPacket>();
-		
-		int numOfPackets = (fileData.length / DATAPacket.MAX_DATA_SIZE_BYTES) + 1;
-		for (int i = 0; i < numOfPackets; i++) {
-			short blockNumber = (short) (i + 1);
-			
-			int start = i * DATAPacket.MAX_DATA_SIZE_BYTES;
-			int end = (i + 1) * DATAPacket.MAX_DATA_SIZE_BYTES;
-			
-			if (end > fileData.length)
-				end = fileData.length;
-			
-			byte[] fileDataPart = Arrays.copyOfRange(fileData, start, end);
-			dataPacketStack.add(DatagramPacketBuilder.getDATADatagram(blockNumber, fileDataPart, returnAddress));
-		}
-		
-		return dataPacketStack;
-	}
-   
+   /**
+    * Handle sending DATA packets to server 
+    * 
+    * @param filePath path of the file client wants to write to
+    * @param mode     mode of the request
+    */
    public void writeFile(String filePath, String mode) {
+	   DatagramPacket receiveDatagramPacket;
+	   
 	   // get file name from file path
 	   String fileName = Paths.get(filePath).getFileName().toString();
 	   
@@ -175,21 +184,21 @@ public class Client {
 		   System.exit(-1);
 	   }
 	   
-	   DatagramPacket responseDatagramPacket = DatagramPacketBuilder.getReceivalbeDatagram();
+	   receiveDatagramPacket = DatagramPacketBuilder.getReceivalbeDatagram();
 	   
+	   // receive ACK packet confirming WRQ request
 	   try {
-		   sendReceiveSocket.receive(responseDatagramPacket);
+		   sendReceiveSocket.receive(receiveDatagramPacket);
 	   } catch (IOException e) {
-		   System.err.println(Globals.getErrorMessage("Client", "cannot recieve DATA packet"));
+		   System.err.println(Globals.getErrorMessage("Client", "cannot recieve ACK packet"));
 		   e.printStackTrace();
 		   System.exit(-1);
 	   }
 	   
-	   byte[] responseDataBytes = responseDatagramPacket.getData();
-	   
+	   // Parse a TFTPPacket to figure out what kind of packet was received
 	   TFTPPacket tftpPacket = null;
 	   try {
-		   tftpPacket = new TFTPPacket(responseDataBytes);
+		   tftpPacket = new TFTPPacket(receiveDatagramPacket.getData(), receiveDatagramPacket.getOffset(), receiveDatagramPacket.getLength());
 	   } catch (TFTPPacketParsingError e) {
 		   System.err.println(Globals.getErrorMessage("Client", "cannot parse TFTP Packet"));
 		   e.printStackTrace();
@@ -198,14 +207,19 @@ public class Client {
 	   
 	   // check if the opCode in response is of ACK
 	   if (tftpPacket.getPacketType() == TFTPPacketType.ACK) {
-		   System.out.println(Globals.getVerboseMessage("Client", "received ACK packet from server"));
+		   System.out.println(Globals.getVerboseMessage("Client", String.format("received ACK packet %d to server", (short) 0)));
 		   
 		   // reads a file on client side to create on the server side
 		   byte[] fileData = fileManager.readFile(filePath);
-		   Queue<DatagramPacket> dataDatagramStack = getStackOfDATADatagramPackets(fileData, responseDatagramPacket.getSocketAddress());
 		   
+		   // create list of DATA datagram packets that contain up to 512 bytes of file data
+		   Queue<DatagramPacket> dataDatagramStack = DatagramPacketBuilder.getStackOfDATADatagramPackets(fileData, receiveDatagramPacket.getSocketAddress());
+		   
+		   int packetCounter = 1;
+		   DatagramPacket dataDatagramPacket;
 		   while (!dataDatagramStack.isEmpty()) {
-			   DatagramPacket dataDatagramPacket = dataDatagramStack.remove();
+			   // send each datagram packet in order and wait for acknowledgement packet from the server
+			   dataDatagramPacket = dataDatagramStack.remove();
 			   
 			   try {
 				   // sends DATA packet with the file content
@@ -216,7 +230,7 @@ public class Client {
 				   System.exit(-1);
 			   }
 			   
-			   System.out.println(Globals.getVerboseMessage("Client", "sent DATA packet to server"));
+			   System.out.println(Globals.getVerboseMessage("Client", String.format("sent DATA packet %d to server", packetCounter)));
 			   
 			   // recevies an ACK packet indicating that the server successfully wrote the file
 			   DatagramPacket ackReceviablePacket = DatagramPacketBuilder.getReceivalbeDatagram();
@@ -227,11 +241,15 @@ public class Client {
 				   e.printStackTrace();
 			   }
 			   
-			   System.out.println(Globals.getVerboseMessage("Client", "received ACK packet from server"));
+			   System.out.println(Globals.getVerboseMessage("Client", String.format("received ACK packet from server", packetCounter)));
+			   packetCounter++;
 		   }
 	   }
    }
    
+   /**
+    * Closes the datagram socket when the connection is finished
+    */
    public void shutdown() {
 	   sendReceiveSocket.close();
    }

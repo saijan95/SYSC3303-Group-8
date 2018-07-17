@@ -2,10 +2,7 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.SocketException;
-import java.util.Arrays;
-import java.util.LinkedList;
 import java.util.Queue;
-import java.util.Stack;
 
 public class RRQServerThread extends Thread {
 	/**
@@ -16,6 +13,11 @@ public class RRQServerThread extends Thread {
 	private DatagramPacket receivedDatagramPacket;
 	private FileManager fileManager;
 	
+	/**
+	 * Constructor
+	 * 
+	 * @param receivedDatagramPacket request datagram packet received from client
+	 */
 	public RRQServerThread(DatagramPacket receivedDatagramPacket) {
 		this.receivedDatagramPacket = receivedDatagramPacket;
 
@@ -30,35 +32,46 @@ public class RRQServerThread extends Thread {
 		fileManager = new FileManager();
 	}
 	
+	/**
+	 * For threading purposes
+	 */
 	public void run() {
 		handleRRQConnection();
 		cleanUp();
 	}
 	
+	/**
+	 * Handles sending DATA datagram packets to client
+	 */
 	private void handleRRQConnection() {
 		RRQWRQPacket requestPacket = null;
+		
 		try {
-			requestPacket = new RRQWRQPacket(receivedDatagramPacket.getData());
+			requestPacket = new RRQWRQPacket(receivedDatagramPacket.getData(), receivedDatagramPacket.getOffset(), receivedDatagramPacket.getLength());
 		} catch (TFTPPacketParsingError e) {
 			System.err.println(Globals.getErrorMessage("RRQServerThread", "cannot parse TFTP packet"));
 			e.printStackTrace();
 			System.exit(-1);
 		}
 		
-		// creates an DATA packet for response to RRQ
+		// get the file name requested by the client
 		String fileName = requestPacket.getFileName();
 		
-		// read the whole file
+		// read the whole file requested by the client
 		byte[] fileData = fileManager.readFile(fileName);
 		
-		Queue<DatagramPacket> dataDatagramPacketStack = getStackOfDATADatagramPackets(fileData);
+		// create list of DATA datagram packets that contain up to 512 bytes of file data
+		Queue<DatagramPacket> dataDatagramPacketStack = DatagramPacketBuilder.getStackOfDATADatagramPackets(fileData, receivedDatagramPacket.getSocketAddress());
 		
 		int packetCounter = 1;
 		while (!dataDatagramPacketStack.isEmpty()) {
+			// send each datagram packet in order and wait for acknowledgement packet from the client
 			DatagramPacket dataDatagramPacket = dataDatagramPacketStack.remove();
 			
 			System.out.println(Globals.getVerboseMessage("RRQServerThread", 
-					String.format("sending DATA packet %d to client %s",packetCounter, dataDatagramPacket.getAddress())));
+					String.format("sending DATA packet %d to client %s", packetCounter, dataDatagramPacket.getAddress())));
+			
+			// send DATA datagram packet
 			try {
 				datagramSocket.send(dataDatagramPacket);
 			} catch (IOException e) {
@@ -67,6 +80,7 @@ public class RRQServerThread extends Thread {
 				System.exit(-1);
 			}
 			
+			// receive ACK datagram packet
 			DatagramPacket receviableDatagramPacket = DatagramPacketBuilder.getReceivalbeDatagram();
 			
 			try {
@@ -77,31 +91,30 @@ public class RRQServerThread extends Thread {
 				System.exit(-1);
 			}
 			
+			ACKPacket ackPacket = null;
+			try {
+				ackPacket = new ACKPacket(receviableDatagramPacket.getData(), receviableDatagramPacket.getOffset(), receviableDatagramPacket.getLength());
+			} catch (TFTPPacketParsingError e) {
+				System.err.println(Globals.getErrorMessage("RRQServerThread", "cannot parse ACK packet"));
+				e.printStackTrace();
+				System.exit(-1);
+			}
+
+			
+			System.out.println(Globals.getVerboseMessage("RRQServerThread", 
+					String.format("received ACK packet %d to client %s", ackPacket.getBlockNumber(), dataDatagramPacket.getAddress())));
+			
 			packetCounter++;
 		}
+		
+		System.out.println(Globals.getErrorMessage("RRQServerThread", "connection finished"));
 	}
 	
-	private Queue<DatagramPacket> getStackOfDATADatagramPackets(byte[] fileData) {
-		Queue<DatagramPacket> dataPacketStack = new LinkedList<DatagramPacket>();
-		
-		int numOfPackets = (fileData.length / DATAPacket.MAX_DATA_SIZE_BYTES) + 1;
-		for (int i = 0; i < numOfPackets; i++) {
-			short blockNumber = (short) (i + 1);
-			
-			int start = i * DATAPacket.MAX_DATA_SIZE_BYTES;
-			int end = (i + 1) * DATAPacket.MAX_DATA_SIZE_BYTES;
-			
-			if (end > fileData.length)
-				end = fileData.length;
-			
-			byte[] fileDataPart = Arrays.copyOfRange(fileData, start, end);
-			dataPacketStack.add(DatagramPacketBuilder.getDATADatagram(blockNumber, fileDataPart, receivedDatagramPacket.getSocketAddress()));
-		}
-		
-		return dataPacketStack;
-	}
-	
+	/**
+	 * Closes datagram socket once the connection is finished
+	 */
 	private void cleanUp() {
+		System.out.println(Globals.getErrorMessage("RRQServerThread", "socket closed"));
 		datagramSocket.close();
 	}
 }

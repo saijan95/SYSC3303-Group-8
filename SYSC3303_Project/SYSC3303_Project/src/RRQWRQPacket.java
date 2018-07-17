@@ -24,8 +24,8 @@ public class RRQWRQPacket extends TFTPPacket {
 	 * @param packetBytes list of bytes that form the packet
 	 * @throws TFTPPacketParsingError
 	 */
-	public RRQWRQPacket(byte[] packetBytes) throws TFTPPacketParsingError {
-		super(packetBytes);
+	public RRQWRQPacket(byte[] packetBytes, int offset, int packetLength) throws TFTPPacketParsingError {
+		super(packetBytes, offset, packetLength);
 		parseFileName();
 		parseMode();
 	}
@@ -62,9 +62,8 @@ public class RRQWRQPacket extends TFTPPacket {
 	private void parseMode() throws TFTPPacketParsingError {
 		int fileNameBytesLength =  0;
 		for(int i = 2; i < super.packetBytes.length; i++) {
-			if (super.packetBytes[i] == 0) {
+			if (super.packetBytes[i] == 0)
 				break;
-			}
 			
 			fileNameBytesLength++;
 		}

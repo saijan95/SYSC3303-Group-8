@@ -20,8 +20,10 @@ public class TFTPPacket {
 	 * @param packetBytes list of bytes that form the packet
 	 * @throws TFTPPacketParsingError
 	 */
-	public TFTPPacket(byte[] packetBytes) throws TFTPPacketParsingError {
-		this.packetBytes = packetBytes;
+	public TFTPPacket(byte[] packetBytes, int offset, int packetLength) throws TFTPPacketParsingError {		
+		byte[] data = new byte[packetLength];
+		System.arraycopy(packetBytes, offset, data, 0, packetLength);
+		this.packetBytes = data;
 		parseOPCode();
 	}
 	

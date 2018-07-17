@@ -23,8 +23,8 @@ public class ERRORPacket extends TFTPPacket {
 	 * @param packetBytes list of bytes that form the packet
 	 * @throws TFTPPacketParsingError
 	 */
-	public ERRORPacket(byte[] packetBytes) throws TFTPPacketParsingError {
-		super(packetBytes);
+	public ERRORPacket(byte[] packetBytes, int offset, int packetLength) throws TFTPPacketParsingError {
+		super(packetBytes, offset, packetLength);
 		parseErrorCode();
 		parseErrorMessage();
 	}
@@ -36,6 +36,7 @@ public class ERRORPacket extends TFTPPacket {
 	 */
 	private void parseErrorCode() throws TFTPPacketParsingError {
 		if (super.packetBytes.length < 4)
+			// not enough byte to parse error code
 			throw new TFTPPacketParsingError("error parsing error code");
 		
 		byte[] errorCodeBytes = {packetBytes[2], packetBytes[3]};
@@ -49,10 +50,21 @@ public class ERRORPacket extends TFTPPacket {
 	 */
 	private void parseErrorMessage() throws TFTPPacketParsingError {
 		if (super.packetBytes.length < 5) {
+			// not enough byte to parse error message
 			throw new TFTPPacketParsingError("error parsing error message");
 		}
 		
-		byte[] errorMessageBytes = Arrays.copyOfRange(super.packetBytes, 4, super.packetBytes.length);
+		// count the length  of the error message
+		int errorMessageLength = 0;
+		for (int i = 4; i < super.packetBytes.length; i++) {
+			if (packetBytes[i] == 0)
+				break;
+			
+			errorMessageLength++;
+		}
+		
+		// parse the sub array which contains the bytes for the error message
+		byte[] errorMessageBytes = Arrays.copyOfRange(packetBytes, 4, errorMessageLength);
 		errorMessage = ByteConversions.bytesToString(errorMessageBytes);
 	}
 	
@@ -84,11 +96,14 @@ public class ERRORPacket extends TFTPPacket {
 	public static ERRORPacket buildPacket(short errorCode, String errorMessage) {
 		ERRORPacket errorPacket = new ERRORPacket();
 		
+		// convert error code and error message into bytes
 		byte[] errorCodeBytes = ByteConversions.shortToBytes(errorCode);
 		byte[] errorMessageBytes = ByteConversions.stringToBytes(errorMessage);
 		
+		// create an appropriately sized array to contain all bytes
 		byte[] packetBytes = new byte[3 + errorCodeBytes.length + errorCodeBytes.length];
 		
+		// error packet OP code is 5
 		short opCode = 5;
 		
 		// convert opCode to bytes
@@ -100,7 +115,7 @@ public class ERRORPacket extends TFTPPacket {
 		packetBytes[2] = errorCodeBytes[0];
 		packetBytes[3] = errorCodeBytes[1];
 
-		// append fileName bytes to data bytes
+		// append error message bytes to data bytes
 		int c = 4;
 		for (int i = 0; i < errorMessageBytes.length; i++) {
 			packetBytes[c] = errorMessageBytes[i];
@@ -109,6 +124,7 @@ public class ERRORPacket extends TFTPPacket {
 		
 		packetBytes[c] = 0;
 		
+		// Initialize error packet attributes
 		errorPacket.opCode = opCode;
 		errorPacket.errorCode = errorCode;
 		errorPacket.errorMessage = errorMessage;
