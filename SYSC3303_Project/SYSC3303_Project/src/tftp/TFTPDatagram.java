@@ -10,6 +10,7 @@ public class TFTPDatagram implements TFTPPacket {
 	private ByteBuffer body;
 	private DatagramPacket backing;
 	
+	
 	/**
 	 * Constructs a new TFTPDatagram backed by a DatagramPacket
 	 */
@@ -17,6 +18,7 @@ public class TFTPDatagram implements TFTPPacket {
 		backing = new DatagramPacket(new byte[516], 516);
 		body = ByteBuffer.wrap(backing.getData());
 	}
+	
 	
 	/**
 	 * Constructs a new TFTPDatagram targeted for the specified host and port
@@ -48,6 +50,7 @@ public class TFTPDatagram implements TFTPPacket {
 		
 	}
 
+	
 	@Override
 	public void setPayload(byte[] pld) throws TFTPPacketException {
 			
@@ -69,6 +72,7 @@ public class TFTPDatagram implements TFTPPacket {
 		}
 	}
 	
+	
 	/**
 	 * Extract the payload field for multiple packet types.
 	 * may be extended later to process RRQ/WRQ payloads into file paths
@@ -82,6 +86,7 @@ public class TFTPDatagram implements TFTPPacket {
 		body.get(pl, offset, plen); // fill array with payload data or error message
 		return pl;
 	}
+	
 	
 	@Override
 	public byte[] getPayload() throws TFTPPacketException {
@@ -102,16 +107,19 @@ public class TFTPDatagram implements TFTPPacket {
 		}
 	}
 
+	
 	@Override
 	public void setOpcode(short op) {
 		body.putShort(0, op);
 	}
 
+	
 	@Override
 	public short getOpcode() {
 		return body.getShort(0);
 	}
 
+	
 	@Override
 	public void setParameter(short param) throws TFTPPacketException {
 		switch(getType()) {
@@ -128,6 +136,7 @@ public class TFTPDatagram implements TFTPPacket {
 
 	}
 
+	
 	@Override
 	public short getParameter() throws TFTPPacketException {
 		
@@ -143,6 +152,7 @@ public class TFTPDatagram implements TFTPPacket {
 		}
 	}
 
+	
 	@Override
 	public TFTPPacketType getType() {
 		switch (getOpcode()) {
@@ -161,11 +171,12 @@ public class TFTPDatagram implements TFTPPacket {
 		}
 	}
 	
+	
 	/**
 	 * Returns the DatagramPacket object backing this TFTPDatagram
 	 * @return
 	 */
-	public DatagramPacket getBackingDP() {
+	protected DatagramPacket getBackingDP() {
 		return backing;
 	}
 }
