@@ -67,6 +67,27 @@ public class Client {
 	   }
    }
    
+   private void sendErrorPacket(short errorCode, String errorMessage, SocketAddress returnAddress) {
+       /**
+        * Send ERROR packet to the given host
+        * 
+        * @param errorCode: error code
+        * @param errorMessage: Error message
+        * @param ipAddress: server IP address
+        * @param port: server port
+        */
+       DatagramPacket datagramPacket = DatagramPacketBuilder.getERRORDatagram(errorCode, errorMessage, returnAddress);
+       
+       // send request
+       try {
+           sendReceiveSocket.send(datagramPacket);
+       } catch (IOException e) {
+           System.err.println(Globals.getErrorMessage("Client", "cannot send ERROR package"));
+           e.printStackTrace();
+           System.exit(-1);
+       }
+   }
+   
    public void readFile(String filePath, String mode) {
 	   // get file name from file path
 	   String fileName = Paths.get(filePath).getFileName().toString();
@@ -80,7 +101,11 @@ public class Client {
 		   e.printStackTrace();
 		   System.exit(-1);
 	   }
-	   
+	         
+	   // Transfer ID of the server
+	   int serverTID = 0; // server TID is not received yet
+	   int nextBlockNumber = 1; // expect to receive DATA with valid block number
+
 	   int fileDataLen = DATAPacket.MAX_DATA_SIZE_BYTES;
 	   while (fileDataLen == DATAPacket.MAX_DATA_SIZE_BYTES) {
 		   DatagramPacket responseDatagramPacket = DatagramPacketBuilder.getReceivalbeDatagram();
@@ -91,6 +116,24 @@ public class Client {
 			   System.err.println(Globals.getErrorMessage("Client", "cannot recieve DATA packet"));
 			   e.printStackTrace();
 			   System.exit(-1);
+		   }
+		   
+		   // Error handling
+		   if (serverTID == 0) {
+	           // Get the TID of server (in source port field of the Datagram package)
+		       serverTID = responseDatagramPacket.getPort();
+		   } else {
+		       // Validate if the package comes from the remote host of the same TID
+		       int sourceTID = responseDatagramPacket.getPort();
+		       if (serverTID != sourceTID) {
+		           System.err.println(Globals.getErrorMessage("Client", String.format("receives un-expected transfer ID (expected %d, got %d)", serverTID, sourceTID)));
+		           
+		           // Send ERROR package with errorCode = 5 to the remote host where the package came from
+		           sendErrorPacket((short) 5, "TID does not match", responseDatagramPacket.getSocketAddress());
+		           
+		           // Just skip this package, continue this connection
+		           continue;
+		       }
 		   }
 		   
 		   byte[] responseDataBytes = responseDatagramPacket.getData();
@@ -115,6 +158,21 @@ public class Client {
 			   }
 			   
 			   short blockNumber = dataPacket.getBlockNumber();
+
+			   // Error handling
+			   // Validate blockNumber
+			   if (blockNumber != nextBlockNumber) {
+			       System.err.println(Globals.getErrorMessage("Client", String.format("receives un-expected DATA block number (expected %d, got %d)", nextBlockNumber, blockNumber)));
+                   
+                   // Send ERROR package with errorCode = 4 to the remote host
+                   sendErrorPacket((short) 4, "Unexpected block number", responseDatagramPacket.getSocketAddress());
+                   
+                   // Finish this session
+                   fileDataLen = 0;
+                   continue;
+			   }
+			   nextBlockNumber++;
+			   
 			   byte[] fileData = dataPacket.getDataBytes();
 			   
 			   System.out.println(Globals.getVerboseMessage("Client", String.format("received DATA packet %d from server", blockNumber)));
@@ -135,8 +193,33 @@ public class Client {
 			   }
 		   }
 		   else {
-			   // error package
-			   fileDataLen = 0;
+			   
+			   // Error Handling
+			   if (tftpPacket.getPacketType() == TFTPPacketType.ERROR) {
+	               // Got an ERROR package from server
+	               ERRORPacket errorPacket = null;
+	               try {
+	                   errorPacket = new ERRORPacket(responseDataBytes);
+	               } catch (TFTPPacketParsingError e) {
+	                   System.err.println(Globals.getErrorMessage("Client", "cannot parse ERROR Packet"));
+	                   e.printStackTrace();
+	                   System.exit(-1);
+	               }
+	               
+	               // Show the error
+	               System.out.println(Globals.getVerboseMessage("Client", String.format("received ERROR packet (errorCode=%d, errorMsg=%s) from server", errorPacket.getErrorCode(), errorPacket.getErrorMessage())));
+	           
+			   } else {
+			       // Unexpected packet received
+	               System.out.println(Globals.getVerboseMessage("Client", String.format("received unexpected response (opCode=%d) from server.", tftpPacket.getOPCode())));
+	               
+	               // Send ERROR (errorCode=4) back to the host, indicating illegal operation
+	               sendErrorPacket((short) 4, "Unexpected package received", responseDatagramPacket.getSocketAddress());
+	           }
+			   
+			   // Abort this session
+               // error package
+               fileDataLen = 0;
 		   }
 	   }
    }
@@ -184,7 +267,10 @@ public class Client {
 		   e.printStackTrace();
 		   System.exit(-1);
 	   }
-	   
+       
+       // Transfer ID of the server is in source port field of the Datagram package
+       int serverTID = responseDatagramPacket.getPort();
+
 	   byte[] responseDataBytes = responseDatagramPacket.getData();
 	   
 	   TFTPPacket tftpPacket = null;
@@ -204,20 +290,31 @@ public class Client {
 		   byte[] fileData = fileManager.readFile(filePath);
 		   Queue<DatagramPacket> dataDatagramStack = getStackOfDATADatagramPackets(fileData, responseDatagramPacket.getSocketAddress());
 		   
+		   // Keep track of block number to validate ACK packet
+		   short blockNumber = 0;
+		   boolean sendNextDataBlock = true;
+		   
 		   while (!dataDatagramStack.isEmpty()) {
-			   DatagramPacket dataDatagramPacket = dataDatagramStack.remove();
-			   
-			   try {
-				   // sends DATA packet with the file content
-				   sendReceiveSocket.send(dataDatagramPacket);
-			   } catch (IOException e) {
-				   System.err.println(Globals.getErrorMessage("Client", "cannot send DATA packet to server"));
-				   e.printStackTrace();
-				   System.exit(-1);
-			   }
-			   
-			   System.out.println(Globals.getVerboseMessage("Client", "sent DATA packet to server"));
-			   
+		       
+		       if (sendNextDataBlock) {
+		           blockNumber++;
+    			   DatagramPacket dataDatagramPacket = dataDatagramStack.remove();
+    			   
+    			   try {
+    				   // sends DATA packet with the file content
+    				   sendReceiveSocket.send(dataDatagramPacket);
+    			   } catch (IOException e) {
+    				   System.err.println(Globals.getErrorMessage("Client", "cannot send DATA packet to server"));
+    				   e.printStackTrace();
+    				   System.exit(-1);
+    			   }
+    			   
+    			   System.out.println(Globals.getVerboseMessage("Client", "sent DATA packet to server"));
+    			   
+    			   // Should only send next DATA packet when a valid ACK received
+    			   sendNextDataBlock = false;
+		       }
+		       
 			   // recevies an ACK packet indicating that the server successfully wrote the file
 			   DatagramPacket ackReceviablePacket = DatagramPacketBuilder.getReceivalbeDatagram();
 			   try {
@@ -226,9 +323,112 @@ public class Client {
 				   System.err.println(Globals.getErrorMessage("Client", "cannot receive ACK packet from server"));
 				   e.printStackTrace();
 			   }
-			   
-			   System.out.println(Globals.getVerboseMessage("Client", "received ACK packet from server"));
+
+		       // Error handling:
+		       // Validate if the package comes from the remote host of the same TID
+		       int sourceTID = ackReceviablePacket.getPort();
+		       if (serverTID != sourceTID) {
+		           System.err.println(Globals.getErrorMessage("Client", String.format("receives un-expected transfer ID (expected %d, got %d)", serverTID, sourceTID)));
+		           
+		           // Send ERROR package with errorCode = 5 to the remote host where the package came from
+		           sendErrorPacket((short) 5, "TID does not match", ackReceviablePacket.getSocketAddress());
+		           
+		           // Just skip this packet, waiting for valid ACK
+		           continue;
+		       }
+		       
+		       // Parse response package to see if it is a valid operation
+		       byte[] responseAckBytes = ackReceviablePacket.getData();
+		       try {
+		           tftpPacket = new TFTPPacket(responseAckBytes);
+		       } catch (TFTPPacketParsingError e) {
+		           System.err.println(Globals.getErrorMessage("Client", "cannot parse TFTP Packet"));
+		           e.printStackTrace();
+		           System.exit(-1);
+		       }
+		       
+		       if (tftpPacket.getPacketType() == TFTPPacketType.ACK) {
+		           // Got an ACK package from server
+                   ACKPacket ackPacket = null;
+                   try {
+                       ackPacket = new ACKPacket(responseAckBytes);
+                   } catch (TFTPPacketParsingError e) {
+                       System.err.println(Globals.getErrorMessage("Client", "cannot parse ACK Packet"));
+                       e.printStackTrace();
+                       System.exit(-1);
+                   }
+                   
+                   System.out.println(Globals.getVerboseMessage("Client", "received ACK packet from server"));
+
+                   // Validate block number
+                   short ackBlockNumber = ackPacket.getBlockNumber();
+                   if (ackBlockNumber != blockNumber) {
+                       // Invalid ACK
+                       System.out.println(Globals.getVerboseMessage("Client", String.format("got unexpected block number (expected %d, got %d) from ACK packet", blockNumber, ackBlockNumber)));
+                       
+                       // Send ERROR package with errorCode = 4 to the remote host where the package came from
+                       sendErrorPacket((short) 4, "BlockNumber does not match", ackReceviablePacket.getSocketAddress());
+                       
+                       // Abort this session
+                       dataDatagramStack.clear();
+                   
+                   } else {
+                       // valid ACK, continue to send next DATA packet
+                       sendNextDataBlock = true;
+                   }
+		       }
+		       else {
+		           // Error Handling
+	               if (tftpPacket.getPacketType() == TFTPPacketType.ERROR) {
+	                   // Got an ERROR package from server
+	                   ERRORPacket errorPacket = null;
+	                   try {
+	                       errorPacket = new ERRORPacket(responseAckBytes);
+	                   } catch (TFTPPacketParsingError e) {
+	                       System.err.println(Globals.getErrorMessage("Client", "cannot parse ERROR Packet"));
+	                       e.printStackTrace();
+	                       System.exit(-1);
+	                   }
+	                   
+	                   // Show the error
+	                   System.out.println(Globals.getVerboseMessage("Client", String.format("received ERROR packet (errorCode=%d, errorMsg=%s) from server", errorPacket.getErrorCode(), errorPacket.getErrorMessage())));
+	               
+	               } else {
+	                   // Unexpected packet received
+	                   System.out.println(Globals.getVerboseMessage("Client", String.format("received unexpected response (opCode=%d) from server.", tftpPacket.getOPCode())));
+	                   
+	                   // Send ERROR (errorCode=4) back to the host, indicating illegal operation
+	                   sendErrorPacket((short) 4, "Unexpected package received", ackReceviablePacket.getSocketAddress());
+	               }
+	               
+	               // Abort this session
+	               dataDatagramStack.clear();
+		       }
 		   }
+	   }
+	   else {
+	       // Error Handling
+           if (tftpPacket.getPacketType() == TFTPPacketType.ERROR) {
+               // Got an ERROR package from server
+               ERRORPacket errorPacket = null;
+               try {
+                   errorPacket = new ERRORPacket(responseDataBytes);
+               } catch (TFTPPacketParsingError e) {
+                   System.err.println(Globals.getErrorMessage("Client", "cannot parse ERROR Packet"));
+                   e.printStackTrace();
+                   System.exit(-1);
+               }
+               
+               // Show the error
+               System.out.println(Globals.getVerboseMessage("Client", String.format("received ERROR packet (errorCode=%d, errorMsg=%s) from server", errorPacket.getErrorCode(), errorPacket.getErrorMessage())));
+           
+           } else {
+               // Unexpected packet received
+               System.out.println(Globals.getVerboseMessage("Client", String.format("received unexpected response (opCode=%d) from server.", tftpPacket.getOPCode())));
+               
+               // Send ERROR (errorCode=4) back to the host, indicating illegal operation
+               sendErrorPacket((short) 4, "Unexpected package received", responseDatagramPacket.getSocketAddress());
+           }
 	   }
    }
    
