@@ -9,19 +9,9 @@ public class ErrorSimulator implements Runnable {
 	
 	private boolean online;
 	private DatagramSocket sendAndReceiveSocket;
-	
-	private InetAddress serverAddress;
-	private int serverPort;
+	private int errorCode = 0;
 	
 	public ErrorSimulator() {
-		try {
-			serverAddress = InetAddress.getLocalHost();
-			serverPort = NetworkConfig.SERVER_PORT;
-		} catch (UnknownHostException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		}
-		
 		try {
 			// create a datagram socket to establish a connection with incoming
 			// RRQ and WRQ connections
@@ -53,37 +43,20 @@ public class ErrorSimulator implements Runnable {
 				System.exit(-1);
 			}
 			
-			TFTPPacket tftpPacket = null;
-			try {
-				tftpPacket = new TFTPPacket(receiveClientDatagramPacket.getData());
-			} catch (TFTPPacketParsingError e1) {
-				// TODO Auto-generated catch block
-				e1.printStackTrace();
-			}
-			if (tftpPacket.getPacketType() == TFTPPacketType.RRQ || 
-					tftpPacket.getPacketType() == TFTPPacketType.RRQ) {
-				try {
-					serverAddress = InetAddress.getLocalHost();
-				} catch (UnknownHostException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-				serverPort = NetworkConfig.SERVER_PORT;
+			//checks for errorcode, and sends the byte [] and code, for the simulator to tamper
+			byte[] packet = receiveClientDatagramPacket.getData();
+			byte[] receiveDataBytes;
+			if ((errorCode == 2) || (errorCode == 3)) {
+				receiveDataBytes = simulateError(packet, errorCode);
+			} else {
+				receiveDataBytes = packet;
 			}
 			
 			// Send packet to Server
-			byte[] receiveDataBytes = receiveClientDatagramPacket.getData();
-			/*
-			if (receiveDataBytes[0] == 0) {
-				online = false;
-				continue;
-			}
-			*/
-			
 			DatagramPacket sendServerDatagramPacket = null;
 			try {
 				sendServerDatagramPacket = new DatagramPacket(receiveDataBytes, receiveDataBytes.length, 
-					InetAddress.getLocalHost(), serverPort);
+					InetAddress.getLocalHost(), NetworkConfig.SERVER_PORT);
 			} catch (UnknownHostException e) {
 				System.out.print("Unknown Host Exception: likely:");
 				System.out.println("Packet failed to create.\n" + e);
@@ -113,16 +86,6 @@ public class ErrorSimulator implements Runnable {
 			
 			// Send packet to Client
 			receiveDataBytes = receiveServerDatagramPacket.getData();
-			/*
-			if (receiveDataBytes[0] == 0) {
-				online = false;
-				continue;
-			}
-			*/
-			
-			serverAddress = ((InetSocketAddress) receiveServerDatagramPacket.getSocketAddress()).getAddress();
-			serverPort = ((InetSocketAddress) receiveServerDatagramPacket.getSocketAddress()).getPort();
-			
 			DatagramPacket sendClientDatagramPacket = null;
 			try {
 				sendClientDatagramPacket = new DatagramPacket(receiveDataBytes, receiveDataBytes.length, 
@@ -142,7 +105,6 @@ public class ErrorSimulator implements Runnable {
 				e.printStackTrace();
 				System.exit(-1);
 			}
-					
 		}
 		
 		sendAndReceiveSocket.close();
@@ -150,7 +112,8 @@ public class ErrorSimulator implements Runnable {
 	
 	public void shutdown() {
 		System.out.println(Globals.getVerboseMessage("Error Simulator", "shutting down..."));
-		
+		online = false;
+				
 		// wait for any packets to be replayed
 		try {
 			Thread.sleep(1000);
@@ -165,7 +128,8 @@ public class ErrorSimulator implements Runnable {
 			// therefore once it re-evaluates that the boolean online is false it will exit
 			try {
 				DatagramSocket shutdownClient = new DatagramSocket();
-				shutdownClient.send(DatagramPacketBuilder.getShutdownDatagram(InetAddress.getLocalHost(), NetworkConfig.PROXY_PORT));
+				shutdownClient.send(new DatagramPacket(new byte[0], 0, InetAddress.getLocalHost(), NetworkConfig.PROXY_PORT));
+				shutdownClient.send(new DatagramPacket(new byte[0], 0, InetAddress.getLocalHost(), NetworkConfig.PROXY_PORT));
 				shutdownClient.close();
 			} catch (UnknownHostException e) {
 				System.err.println(Globals.getErrorMessage("Error Simulator", "cannot find localhost address."));
@@ -181,13 +145,25 @@ public class ErrorSimulator implements Runnable {
 		System.out.println(Globals.getVerboseMessage("Error Simulator", "goodbye!"));
 	}
 	
+	private byte[] simulateError(byte[] packet, int error) {
+		//Code to tamper here
+		if (error == 2) {
+			
+		}
+		else if (error == 3) {
+			
+		}
+	}
+	
 	public static void main(String[] args) {
 		ErrorSimulator proxy = null;
 		Thread proxyThread = null;
 		
 		System.out.println("\nSYSC 3033 TFTP Error Simulator");
 		System.out.println("1. Start");
-		System.out.println("2. Exit");
+		System.out.println("2. Invalid TFTP on WRQ or RRQ");
+		System.out.println("3. Invalid Mode");
+		System.out.println("4. Exit");
 		System.out.println("Selection: ");
 		
 		int selection = 0;
@@ -197,6 +173,7 @@ public class ErrorSimulator implements Runnable {
 		if (selection == 1) {
 			// create server a thread for it listen on
 			proxy = new ErrorSimulator();
+			proxy.errorCode = selection; //so the errorSimulator knows what to do
 			proxyThread = new Thread(proxy);
 			proxyThread.start();
 		}
