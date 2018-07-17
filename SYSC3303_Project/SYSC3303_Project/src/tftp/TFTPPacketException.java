@@ -1,6 +1,6 @@
 package tftp;
 
-public class TFTPPacketException extends Exception {
+public class TFTPPacketException extends TFTPException {
 
 	public TFTPPacketException() {
 		// TODO Auto-generated constructor stub

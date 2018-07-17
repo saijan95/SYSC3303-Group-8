@@ -1,5 +1,6 @@
 package tftp;
 
+import java.net.InetAddress;
 import java.nio.ByteBuffer;
 
 public interface TFTPPacket {
@@ -41,11 +42,13 @@ public interface TFTPPacket {
 	 */
 	public void setParameter(short param) throws TFTPPacketException;
 	
+	
 	/**
 	 * Not valid for RRQ/WRQ packets
 	 * @return the parameter (second 2 bytes) of the TFTP packet
 	 */
 	public short getParameter() throws TFTPPacketException;
+	
 	
 	/**
 	 * 
@@ -59,4 +62,18 @@ public interface TFTPPacket {
 	 * @param type
 	 */
 	public void setType(TFTPPacketType type) throws TFTPPacketException;
+	
+	
+	/**
+	 * Get the host of this packet
+	 * @return
+	 */
+	public InetAddress getHost();
+	
+	/**
+	 * Get the TID of this packet
+	 * @return
+	 */
+	public int getTID();
+	
 }

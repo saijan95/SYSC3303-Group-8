@@ -5,7 +5,7 @@ import java.net.InetAddress;
 import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 
-public class TFTPDatagram implements TFTPPacket {
+public final class TFTPDatagram implements TFTPPacket {
 	
 	private ByteBuffer body;
 	private DatagramPacket backing;
@@ -31,7 +31,7 @@ public class TFTPDatagram implements TFTPPacket {
 		backing.setPort(port);
 	}
 	
-		
+			
 	/**
 	 * Set the payload field for multiple packet types.
 	 * also sets the backing DatagramPacket length to the end of the payload,
@@ -195,6 +195,22 @@ public class TFTPDatagram implements TFTPPacket {
 		}
 	}
 	
+	
+	@Override
+	public InetAddress getHost() {
+		return backing.getAddress();
+	}
+
+
+	@Override
+	public int getTID() {
+		return backing.getPort();
+	}
+	
+	/*
+	 * PACKAGE METHODS 
+	 */
+	
 	/**
 	 * Returns the DatagramPacket object backing this TFTPDatagram
 	 * @return
@@ -202,4 +218,111 @@ public class TFTPDatagram implements TFTPPacket {
 	protected DatagramPacket getBackingDP() {
 		return backing;
 	}
+	
+	private static TFTPDatagram request(TFTPPacketType type, String path, InetAddress host, int tid) throws TFTPPacketException {
+		
+		TFTPDatagram req = new TFTPDatagram(host, tid);
+		ByteBuffer buf = ByteBuffer.allocate(514);
+		
+		buf.put(path.getBytes()).put((byte) 0).put("octet".getBytes()).put((byte) 0);
+		
+		byte[] tmp = new byte[buf.position()];
+		buf.position(0);
+		buf.get(tmp);
+		req.setType(type);
+		req.setPayload(tmp);
+		
+		return req;
+	}
+	
+	
+	/**
+	 * Constructs a read request packet
+	 * @param path
+	 * @param host
+	 * @param tid
+	 * @return
+	 * @throws TFTPPacketException
+	 */
+	protected static TFTPDatagram RRQ(String path, InetAddress host, int tid) throws TFTPPacketException {
+		
+		return request(TFTPPacketType.RRQ, path, host, tid);
+	}
+	
+	
+	/**
+	 * Constructs a write request packet
+	 * @param path
+	 * @param host
+	 * @param tid
+	 * @return
+	 * @throws TFTPPacketException
+	 */
+	protected static TFTPDatagram WRQ(String path, InetAddress host, int tid) throws TFTPPacketException {
+		return request(TFTPPacketType.WRQ, path, host, tid);
+	}
+	
+	
+	/**
+	 * Constructs a data block packet
+	 * @param blockNum
+	 * @param payload
+	 * @param host
+	 * @param tid
+	 * @return
+	 * @throws TFTPPacketException
+	 */
+	protected static TFTPDatagram DATA(short blockNum, byte[] payload, InetAddress host, int tid) throws TFTPPacketException {
+		
+		TFTPDatagram data = new TFTPDatagram(host, tid);
+		
+		data.setType(TFTPPacketType.DATA);
+		data.setParameter(blockNum);
+		data.setPayload(payload);
+		
+		return data;
+	}
+	
+	
+	/**
+	 * Constructs an acknowledgement packet
+	 * @param blockNum
+	 * @param host
+	 * @param tid
+	 * @return
+	 * @throws TFTPPacketException
+	 */
+	protected static TFTPDatagram ACK(short blockNum, InetAddress host, int tid) throws TFTPPacketException {
+		
+		TFTPDatagram ack = new TFTPDatagram(host, tid);
+		
+		ack.setType(TFTPPacketType.ACK);
+		ack.setParameter(blockNum);
+		
+		return ack;
+	}
+	
+	/**
+	 * Constructs an error packet
+	 * @param errCode
+	 * @param message
+	 * @param host
+	 * @param tid
+	 * @return
+	 * @throws TFTPPacketException
+	 */
+	protected static TFTPDatagram ERROR(short errCode, String message, InetAddress host, int tid) throws TFTPPacketException {
+		
+		TFTPDatagram error = new TFTPDatagram(host, tid);
+		
+		error.setType(TFTPPacketType.ERROR);
+		error.setParameter(errCode);
+		error.setPayload(message.getBytes());
+		
+		return error;
+	}
+
+
+	
+	
 }
