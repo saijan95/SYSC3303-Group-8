@@ -365,10 +365,20 @@ public class ErrorSimulator implements Runnable {
 
 				selection = sc.nextInt();
 				
+				//shutsdown
 				if (selection == 6) {
 					sc.close();
 					System.exit(0);
 				} 
+				//picks random packet
+				else if (selection == 5) {
+					Random rand = new Random();
+					TFTPPacketType[] types = TFTPPacketType.values();
+					proxy.errorOp = types[rand.nextInt(types.length)];
+					while (proxy.errorOp == TFTPPacketType.ERROR) {
+						proxy.errorOp = types[rand.nextInt(types.length)];
+					}
+				}
 				else {
 					switch(selection) {
 					case 1: proxy.errorOp = TFTPPacketType.RRQ;
@@ -382,12 +392,11 @@ public class ErrorSimulator implements Runnable {
 					default:
 						break;
 					}
-					
-					if (proxy.errorOp == TFTPPacketType.ACK || proxy.errorOp == TFTPPacketType.DATA) {
-						System.out.println("Which block would you like to corrupt?");
-						selection = sc.nextInt();
-						proxy.errorBlock = (short)selection;
-					}
+				}
+				if (proxy.errorOp == TFTPPacketType.ACK || proxy.errorOp == TFTPPacketType.DATA) {
+					System.out.println("Which block would you like to corrupt?");
+					selection = sc.nextInt();
+					proxy.errorBlock = (short)selection;
 				}
 			}
 			
