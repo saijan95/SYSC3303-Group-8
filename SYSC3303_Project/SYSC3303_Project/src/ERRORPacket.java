@@ -7,6 +7,10 @@ import java.util.Arrays;
  *
  */
 public class ERRORPacket extends TFTPPacket {
+	public static final short OP_CODE = 5;
+	public static final short ILLEGAL_TFTP_OPERATION = 4;
+	public static final short UNKNOWN_TID = 5;
+	
 	private short errorCode; 
 	private String errorMessage;
 	
@@ -86,6 +90,11 @@ public class ERRORPacket extends TFTPPacket {
 		return errorMessage;
 	}
 	
+	@Override
+	public String toString() {
+		return "errorCode: " + errorCode + ", message: " + errorMessage; 
+	}
+	
 	/**
 	 * Returns an ERROR packet given the attributes
 	 * 
@@ -101,7 +110,7 @@ public class ERRORPacket extends TFTPPacket {
 		byte[] errorMessageBytes = ByteConversions.stringToBytes(errorMessage);
 		
 		// create an appropriately sized array to contain all bytes
-		byte[] packetBytes = new byte[3 + errorCodeBytes.length + errorCodeBytes.length];
+		byte[] packetBytes = new byte[3 + errorCodeBytes.length + errorMessageBytes.length];
 		
 		// error packet OP code is 5
 		short opCode = 5;

@@ -1,17 +1,19 @@
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.SocketAddress;
 import java.net.SocketException;
 import java.util.Queue;
 
+/**
+ * This class is used to communicate further with a client that made a WQR request
+ */
 public class RRQServerThread extends Thread {
-	/**
-	 * This class is used to communicate further with a client that made a WQR request
-	 */
-	
 	private DatagramSocket datagramSocket;
 	private DatagramPacket receivedDatagramPacket;
 	private FileManager fileManager;
+	
+	private SocketAddress serverSocketAddress;
 	
 	/**
 	 * Constructor
@@ -20,6 +22,7 @@ public class RRQServerThread extends Thread {
 	 */
 	public RRQServerThread(DatagramPacket receivedDatagramPacket) {
 		this.receivedDatagramPacket = receivedDatagramPacket;
+		this.serverSocketAddress = receivedDatagramPacket.getSocketAddress();
 
 		try {
 			// create a datagram socket to carry on file transfer operation
@@ -41,17 +44,59 @@ public class RRQServerThread extends Thread {
 	}
 	
 	/**
+	 * Sends an error packet with the Unknown ID error code to the client
+	 * 
+	 * @param errorMessage
+	 */
+	private void sendUnknownTIDErrorPacket(String errorMessage) {
+		DatagramPacket errorDatagramPacket = DatagramPacketBuilder.getERRORDatagram(ERRORPacket.UNKNOWN_TID, errorMessage, serverSocketAddress);
+		
+		System.err.println(Globals.getErrorMessage("RRQServerThread", String.format("sending error packet, errorCode: %d, errorMessage: %s", ERRORPacket.UNKNOWN_TID, errorMessage)));
+		
+		try {
+			datagramSocket.send(errorDatagramPacket);
+		} catch (IOException e) {
+			System.err.println(Globals.getErrorMessage("RRQServerThread", "cannot send ERROR TFTP packet"));
+			e.printStackTrace();
+			System.exit(-1);
+		}
+	}
+	
+	/**
+	 * Sends an error packet with the Illegal Operation error code to the client
+	 * 
+	 * @param errorMessage
+	 */
+	private void sendIllegalOperationErrorPacket(String errorMessage) {
+		DatagramPacket errorDatagramPacket = DatagramPacketBuilder.getERRORDatagram(ERRORPacket.ILLEGAL_TFTP_OPERATION, errorMessage, serverSocketAddress);
+		
+		System.err.println(Globals.getErrorMessage("RRQServerThread", String.format("sending error packet, errorCode: %d, errorMessage: %s", ERRORPacket.ILLEGAL_TFTP_OPERATION, errorMessage)));
+		
+		try {
+			datagramSocket.send(errorDatagramPacket);
+		} catch (IOException e) {
+			System.err.println(Globals.getErrorMessage("RRQServerThread", "cannot send ERROR TFTP packet"));
+			e.printStackTrace();
+			System.exit(-1);
+		}
+	}
+	
+	/**
 	 * Handles sending DATA datagram packets to client
 	 */
 	private void handleRRQConnection() {
 		RRQWRQPacket requestPacket = null;
 		
+		// parse read request packet
 		try {
 			requestPacket = new RRQWRQPacket(receivedDatagramPacket.getData(), receivedDatagramPacket.getOffset(), receivedDatagramPacket.getLength());
 		} catch (TFTPPacketParsingError e) {
 			System.err.println(Globals.getErrorMessage("RRQServerThread", "cannot parse TFTP packet"));
-			e.printStackTrace();
-			System.exit(-1);
+			
+			// send an illegal packet error to the client
+			sendIllegalOperationErrorPacket("invalid WRQ packet");
+			
+			return;
 		}
 		
 		// get the file name requested by the client
@@ -85,10 +130,43 @@ public class RRQServerThread extends Thread {
 			
 			try {
 				datagramSocket.receive(receviableDatagramPacket);
+				
+				if (!receviableDatagramPacket.getSocketAddress().equals(serverSocketAddress)) {
+					sendUnknownTIDErrorPacket("data packet came from wrong client");
+					continue;
+				}
+				
 			} catch (IOException e) {
 				System.err.println(Globals.getErrorMessage("RRQServerThread", "cannot receive ACK packet"));
 				e.printStackTrace();
 				System.exit(-1);
+			}
+			
+			try {
+				TFTPPacket tftpPacket = new TFTPPacket(receviableDatagramPacket.getData(), receviableDatagramPacket.getOffset(), receviableDatagramPacket.getLength());
+				if (tftpPacket.getPacketType() == TFTPPacketType.ERROR) {
+					ERRORPacket errorPacket = new ERRORPacket(receviableDatagramPacket.getData(), receviableDatagramPacket.getOffset(), receviableDatagramPacket.getLength());
+					
+					System.err.println(Globals.getErrorMessage("RRQServerThread", String.format("received error packet %s", errorPacket)));
+					
+					short errorCode = errorPacket.getErrorCode();
+					if (errorCode == ERRORPacket.ILLEGAL_TFTP_OPERATION) {
+						// terminate connection
+						return;
+					}
+					else if (errorCode == ERRORPacket.UNKNOWN_TID) {
+						// continue to the next packet 
+						continue;
+					}
+				}
+			} catch (TFTPPacketParsingError e) {
+				System.err.println(Globals.getErrorMessage("RRQServerThread", "cannot parse TFTP packet"));
+				
+				// send an illegal packet error to the client
+				sendIllegalOperationErrorPacket("invalid TFTP packet");
+				
+				e.printStackTrace();
+				return;
 			}
 			
 			ACKPacket ackPacket = null;
@@ -96,8 +174,12 @@ public class RRQServerThread extends Thread {
 				ackPacket = new ACKPacket(receviableDatagramPacket.getData(), receviableDatagramPacket.getOffset(), receviableDatagramPacket.getLength());
 			} catch (TFTPPacketParsingError e) {
 				System.err.println(Globals.getErrorMessage("RRQServerThread", "cannot parse ACK packet"));
+				
+				// send an illegal packet error to the client
+				sendIllegalOperationErrorPacket("invalid ACK packet");
+				
 				e.printStackTrace();
-				System.exit(-1);
+				return;
 			}
 
 			
@@ -107,14 +189,14 @@ public class RRQServerThread extends Thread {
 			packetCounter++;
 		}
 		
-		System.out.println(Globals.getErrorMessage("RRQServerThread", "connection finished"));
+		System.out.println(Globals.getVerboseMessage("RRQServerThread", "connection finished"));
 	}
 	
 	/**
 	 * Closes datagram socket once the connection is finished
 	 */
 	private void cleanUp() {
-		System.out.println(Globals.getErrorMessage("RRQServerThread", "socket closed"));
+		System.out.println(Globals.getVerboseMessage("RRQServerThread", "socket closed"));
 		datagramSocket.close();
 	}
 }
