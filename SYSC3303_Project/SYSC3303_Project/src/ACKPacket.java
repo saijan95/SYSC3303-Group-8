@@ -20,8 +20,8 @@ public class ACKPacket extends TFTPPacket {
 	 * @param packetBytes list of bytes that form the packet
 	 * @throws TFTPPacketParsingError
 	 */
-	public ACKPacket(byte[] packetBytes) throws TFTPPacketParsingError {
-		super(packetBytes);
+	public ACKPacket(byte[] packetBytes, int offset, int packetLength) throws TFTPPacketParsingError {
+		super(packetBytes, offset, packetLength);
 		
 		/* parses list of bytes and initializes packet attributes
 		 * 		- block number 

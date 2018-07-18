@@ -23,9 +23,7 @@ public class FileManager {
 	 * 
 	 * Return list of bytes 
 	 */
-	public byte[] readFile(String fileName) {
-
-		
+	public byte[] readFile(String fileName) {		
 		Path path = Paths.get(fileName);
 		
 		byte[] fileBytes = null;
@@ -47,7 +45,7 @@ public class FileManager {
 	 * @param fileName: file name
 	 * @param data: file data in byte form
 	 */
-	public void writeFile(String fileName, int blockNumber, byte[] data) {
+	public void writeFile(String fileName, byte[] data) {
 		File file = new File(fileName);
 		
 		// create a new file if it does not exist
@@ -61,6 +59,7 @@ public class FileManager {
 		
 		// write to file
 		try {
+			// append to previous data on file
 			FileOutputStream fileOutputStream = new FileOutputStream(file, true);
 			fileOutputStream.write(data);
 			fileOutputStream.close();

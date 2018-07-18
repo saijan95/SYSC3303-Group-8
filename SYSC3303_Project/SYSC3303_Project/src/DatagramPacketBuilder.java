@@ -1,6 +1,9 @@
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.SocketAddress;
+import java.util.Arrays;
+import java.util.LinkedList;
+import java.util.Queue;
 
 /**
  * This class contains all the methods to create a RRQ, WQR, DATA, ACK and ERROR datagram packets
@@ -21,9 +24,17 @@ public class DatagramPacketBuilder {
 		return new DatagramPacket(receiveBytes, receiveBytes.length);
 	}
 	
+	/**
+	 * Returns a packet used to signal server shutdown
+	 * 
+	 * @param serverAddress  address of the server that is to be shutdown
+	 * @param serverPort     address of the port that is to be shutdown
+	 * 
+	 * @return shutdown datagram packet
+	 */
 	public static DatagramPacket getShutdownDatagram(InetAddress serverAddress, int serverPort) {
-		byte[] shutdownBytes = new byte[NetworkConfig.DATAGRAM_PACKET_MAX_LEN];
-		shutdownBytes[0] = 0;
+		// shutdown packet should not have data in it
+		byte[] shutdownBytes = new byte[0];
 		return new DatagramPacket(shutdownBytes, shutdownBytes.length, serverAddress, serverPort);
 	}
 	
@@ -83,5 +94,33 @@ public class DatagramPacketBuilder {
 	public static DatagramPacket getERRORDatagram(short errorCode, String errorMessage, SocketAddress returnAddress) {
 		ERRORPacket errorPacket = ERRORPacket.buildPacket(errorCode, errorMessage);
 		return new DatagramPacket(errorPacket.packetBytes, errorPacket.packetBytes.length, returnAddress);
+	}
+	
+	/**
+	 * Return a stack of DATA datagram packets each containing maximum of 512 bytes of the file
+	 * @param fileData       bytes from the whole file
+	 * @param returnAddress  address where the datagram packets will be sent to 
+	 * 
+	 * @return stack of datagram packets
+	 */
+	public static Queue<DatagramPacket> getStackOfDATADatagramPackets(byte[] fileData, SocketAddress returnAddress) {
+		Queue<DatagramPacket> dataPacketStack = new LinkedList<DatagramPacket>();
+		
+		// calculate the number of packets will be required to transfer the whole file
+		int numOfPackets = (fileData.length / DATAPacket.MAX_DATA_SIZE_BYTES) + 1;
+		for (int i = 0; i < numOfPackets; i++) {
+			short blockNumber = (short) (i + 1);
+			
+			int start = i * DATAPacket.MAX_DATA_SIZE_BYTES;
+			int end = (i + 1) * DATAPacket.MAX_DATA_SIZE_BYTES;
+			
+			if (end > fileData.length)
+				end = fileData.length;
+			
+			byte[] fileDataPart = Arrays.copyOfRange(fileData, start, end);
+			dataPacketStack.add(DatagramPacketBuilder.getDATADatagram(blockNumber, fileDataPart, returnAddress));
+		}
+		
+		return dataPacketStack;
 	}
 }
