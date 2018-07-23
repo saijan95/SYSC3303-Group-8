@@ -1,3 +1,4 @@
+import java.net.InetAddress;
 import java.util.Arrays;
 
 /**
@@ -24,8 +25,8 @@ public class DATAPacket extends TFTPPacket {
 	 * @param packetBytes list of bytes that form the packet
 	 * @throws TFTPPacketParsingError
 	 */
-	public DATAPacket(byte[] packetBytes, int offset, int packetLength) throws TFTPPacketParsingError {
-		super(packetBytes, offset, packetLength);
+	public DATAPacket(TFTPPacket tftpPacket) throws TFTPPacketParsingError {
+		super(tftpPacket);
 		/* parses list of bytes and initializes packet attributes
 		 * 		- block number
 		 * 		- data bytes 
@@ -88,7 +89,7 @@ public class DATAPacket extends TFTPPacket {
 	 * @return DATA packet containing the array of bytes that form the packet and the
 	 * 					  initialized attributes
 	 */
-	public static DATAPacket buildPacket(short blockNumber, byte[] dataBytes) {
+	public static DATAPacket buildPacket(short blockNumber, byte[] dataBytes, InetAddress remoteAddress, int remotePort) {
 		DATAPacket dataPacket = new DATAPacket();
 		
 		// create a properly sized bytes array
@@ -119,6 +120,8 @@ public class DATAPacket extends TFTPPacket {
 		dataPacket.blockNumber = blockNumber;
 		dataPacket.dataBytes = dataBytes;
 		dataPacket.packetBytes = packetBytes;
+		dataPacket.remoteAddress = remoteAddress;
+		dataPacket.remotePort = remotePort;
 		
 		return dataPacket;
 	}

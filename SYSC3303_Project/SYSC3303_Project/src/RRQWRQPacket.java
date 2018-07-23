@@ -1,3 +1,4 @@
+import java.net.InetAddress;
 import java.util.Arrays;
 
 /**
@@ -24,8 +25,8 @@ public class RRQWRQPacket extends TFTPPacket {
 	 * @param packetBytes list of bytes that form the packet
 	 * @throws TFTPPacketParsingError
 	 */
-	public RRQWRQPacket(byte[] packetBytes, int offset, int packetLength) throws TFTPPacketParsingError {
-		super(packetBytes, offset, packetLength);
+	public RRQWRQPacket(TFTPPacket tftpPackett) throws TFTPPacketParsingError {
+		super(tftpPackett);
 		parseFileName();
 		parseMode();
 	}
@@ -115,7 +116,7 @@ public class RRQWRQPacket extends TFTPPacket {
 	 * @return RRQ/WRQ packet containing the array of bytes that form the packet and the
 	 * 		   initialized attributes
 	 */
-	public static RRQWRQPacket buildPacket(TFTPPacketType type, String fileName, String mode) {
+	public static RRQWRQPacket buildPacket(TFTPPacketType type, String fileName, String mode, InetAddress remoteAddress, int remotePort) {
 		RRQWRQPacket requestPacket = new RRQWRQPacket();
 		
 		byte[] fileNameBytes = ByteConversions.stringToBytes(fileName);
@@ -163,6 +164,8 @@ public class RRQWRQPacket extends TFTPPacket {
 		requestPacket.fileName = fileName;
 		requestPacket.mode = mode;
 		requestPacket.packetBytes = packetBytes;
+		requestPacket.remoteAddress = remoteAddress;
+		requestPacket.remotePort = remotePort;
 		
 		return requestPacket;
 	}

@@ -1,3 +1,5 @@
+import java.net.InetAddress;
+
 /**
  * This class represents the ACK TFTP packet
  * 
@@ -20,8 +22,8 @@ public class ACKPacket extends TFTPPacket {
 	 * @param packetBytes list of bytes that form the packet
 	 * @throws TFTPPacketParsingError
 	 */
-	public ACKPacket(byte[] packetBytes, int offset, int packetLength) throws TFTPPacketParsingError {
-		super(packetBytes, offset, packetLength);
+	public ACKPacket(TFTPPacket tftpPacket) throws TFTPPacketParsingError {
+		super(tftpPacket);
 		
 		/* parses list of bytes and initializes packet attributes
 		 * 		- block number 
@@ -59,7 +61,7 @@ public class ACKPacket extends TFTPPacket {
 	 * @return ACK packet containing the array of bytes that form the packet and the
 	 * 					  initialized attributes
 	 */
-	public static ACKPacket buildPacket(short blockNumber) {
+	public static ACKPacket buildPacket(short blockNumber, InetAddress remoteAddress, int remotePort) {
 		ACKPacket ackPacket = new ACKPacket();
 		
 		// create a properly sized bytes array
@@ -82,6 +84,8 @@ public class ACKPacket extends TFTPPacket {
 		ackPacket.opCode = opCode;
 		ackPacket.blockNumber = blockNumber;
 		ackPacket.packetBytes = packetBytes;
+		ackPacket.remoteAddress = remoteAddress;
+		ackPacket.remotePort = remotePort;
 		
 		return ackPacket;
 	}
