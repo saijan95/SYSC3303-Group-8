@@ -1,4 +1,4 @@
-import java.io.*;
+import java.io.IOException;
 import java.net.*;
 import java.util.Random;
 import java.util.Scanner;
@@ -8,13 +8,17 @@ public class ErrorSimulator implements Runnable {
 	 * This class represents the error simulator
 	 */
 	
-	private boolean online;
-	private DatagramSocket datagramSocket;
+	private TFTPSocket tftpSocket;
 	
 	// the port of the server that the client is communicating with
+	private InetAddress serverThreadAddress;
 	private int serverThreadPort;
+	
 	// the port of the client that the server is communicating with
+	private InetAddress clientAddress;
 	private int clientPort;
+	
+	private boolean sendingToServer;
 	
 	// error code to simulate
 	private int errorSelection;
@@ -25,198 +29,151 @@ public class ErrorSimulator implements Runnable {
 	
 	
 	public ErrorSimulator() {
+		try {
+			serverThreadAddress = InetAddress.getLocalHost();
+		} catch (UnknownHostException e) {
+			System.err.println(Globals.getErrorMessage("Error Simulator", "cannot get localhost address"));
+			e.printStackTrace();
+			System.exit(-1);
+		}
 		serverThreadPort = NetworkConfig.SERVER_PORT;
 		
-		try {
-			// create a datagram socket to establish a connection with incoming
-			datagramSocket = new DatagramSocket(NetworkConfig.PROXY_PORT);
-		} catch (SocketException e) {
-			System.err.println(Globals.getErrorMessage("Error Simulator", "cannot create datagram socket on specified port"));
-			e.printStackTrace();
-		}
+		// create a datagram socket to establish a connection with incoming
+		tftpSocket = new TFTPSocket(NetworkConfig.PROXY_PORT);
+		
+		// send packet to server from client
+		sendingToServer = true;
 	}
 	
 	public void run() {
 		listen();
 	}
 	
-	private TFTPPacket parseTFTPPacket(byte[] packetBytes, int offset, int packetLength) {
-		// creates a tftp packet with the received bytes
-		TFTPPacket tftpPacket = null;
-		
-		try {
-			tftpPacket = new TFTPPacket(packetBytes, offset, packetLength);
-		} catch (TFTPPacketParsingError e) {
-			System.err.println(Globals.getErrorMessage("Error Simulator", "cannot parse TFTP packet"));
-			e.printStackTrace();
-			System.exit(-1);
-		}
-		
-		return tftpPacket;
-	}
-	
-	private DatagramPacket establishNewConnection(byte[] packetBytes, SocketAddress returnAddress) {
+	private TFTPPacket establishNewConnection(TFTPPacket tftpPacket, InetAddress clientAddress, int clientPort) {
 		System.out.println(Globals.getVerboseMessage("Error Simulator", "received packet from client."));
 		
 		// save client address and port
-		clientPort = ((InetSocketAddress) returnAddress).getPort();
+		this.clientAddress = clientAddress;
+		this.clientPort = clientPort;
+		
+		sendingToServer = true;
 		
 		// save server address and port 
+		try {
+			serverThreadAddress = InetAddress.getLocalHost();
+		} catch (UnknownHostException e) {
+			System.err.println(Globals.getErrorMessage("Error Simulator", "cannot get localhost address"));
+			e.printStackTrace();
+			System.exit(-1);
+		}
 		serverThreadPort = NetworkConfig.SERVER_PORT;
 		
 		System.out.println(Globals.getVerboseMessage("Error Simulator", "sending packet to server..."));
 		
+		TFTPPacket sendTFTPPacket;
 		try {
-			DatagramPacket sendDatagramPacket = new DatagramPacket(packetBytes, packetBytes.length, 
-					InetAddress.getLocalHost(), serverThreadPort);
-			
-			datagramSocket.send(sendDatagramPacket);
-		} catch (IOException e) {
-			System.err.println(Globals.getErrorMessage("Error Simulator", "cannot send packages"));
-			e.printStackTrace();
-			System.exit(-1);
-		}	
-		
-		System.out.println(Globals.getVerboseMessage("Error Simulator", "waiting for packet from server..."));
-		
-		DatagramPacket receivableDatagramPacket = null;
-		try {
-			receivableDatagramPacket = DatagramPacketBuilder.getReceivalbeDatagram();
-			datagramSocket.receive(receivableDatagramPacket);
-			serverThreadPort = ((InetSocketAddress) receivableDatagramPacket.getSocketAddress()).getPort();
-		} catch (IOException e) {
-			System.err.println(Globals.getErrorMessage("Error Simulator", "cannot receive packages"));
+			sendTFTPPacket = new TFTPPacket(tftpPacket.getPacketBytes(), 0, tftpPacket.getPacketBytes().length, this.serverThreadAddress, this.serverThreadPort);
+			tftpSocket.send(sendTFTPPacket);
+		} catch (TFTPPacketParsingError e) {
+			System.err.println(Globals.getErrorMessage("Error Simulator", "cannot create TFTP packet"));
 			e.printStackTrace();
 			System.exit(-1);
 		}
 		
-		return receivableDatagramPacket;
+		sendingToServer = false;
+		
+		System.out.println(Globals.getVerboseMessage("Error Simulator", "waiting for packet from server..."));
+		
+		TFTPPacket receiveTFTPPacket = tftpSocket.receive();
+		serverThreadAddress = receiveTFTPPacket.getRemoteAddress();
+		serverThreadPort = receiveTFTPPacket.getRemotePort();
+		return receiveTFTPPacket;
 	}
 	
 	private void listen() {
-		online = true;
-		
-		TFTPPacket tftpPacket;
-		byte[] packetBytes;
-		
-		DatagramPacket receivableDatagramPacket;
-		DatagramPacket sendDatagramPacket;
-		
-		while (online) {
+		while (!tftpSocket.isClosed()) {
 			// Receive packet from Client
-			receivableDatagramPacket = DatagramPacketBuilder.getReceivalbeDatagram();
-			System.out.println(Globals.getVerboseMessage("Error Simulator", "waiting for packet..."));
+			TFTPPacket receiveTFTPacket = null;
+			TFTPPacket sendTFTPPacket = null;			
+					
+			receiveTFTPacket = tftpSocket.receive();
+			
+			if (receiveTFTPacket == null) {
+				continue;
+			}
+
+			// checks if the incoming packet is a request packet
+			// if so then reset the server port back to the main port
+			if (receiveTFTPacket.getPacketType() == TFTPPacketType.RRQ || 
+					receiveTFTPacket.getPacketType() == TFTPPacketType.WRQ) {
+
+				if (errorSelection == 2 && (errorOp == TFTPPacketType.RRQ || errorOp == TFTPPacketType.WRQ)) {
+					receiveTFTPacket = simulateIllegalOperationError(receiveTFTPacket, errorSelection, errorOp, errorBlock);
+				}
+
+				receiveTFTPacket = establishNewConnection(receiveTFTPacket, receiveTFTPacket.getRemoteAddress(), receiveTFTPacket.getRemotePort());
+			}
+			else {
+				if ((errorSelection == 2) || (errorSelection == 3)) {
+					receiveTFTPacket = simulateIllegalOperationError(receiveTFTPacket,  errorSelection, errorOp, errorBlock);
+				}
+			}
+		
+			InetAddress sendAddress;
+			int sendPort;
+			if (!sendingToServer) {
+				System.out.println(Globals.getVerboseMessage("Error Simulator", "recieved packet from server."));
+				System.out.println(Globals.getVerboseMessage("Error Simulator", "sending packet to client..."));
+				sendAddress = clientAddress;
+				sendPort = clientPort;
+				
+			}
+			else {
+				System.out.println(Globals.getVerboseMessage("Error Simulator", "recieved packet from client."));		
+				System.out.println(Globals.getVerboseMessage("Error Simulator", "sending packet to server..."));
+				sendAddress = serverThreadAddress;
+				sendPort = serverThreadPort;
+			}
+			
 			try {
-				datagramSocket.receive(receivableDatagramPacket);
-			} catch (IOException e) {
-				System.err.println(Globals.getErrorMessage("Error Simulator", "cannot receive packages"));
+				sendTFTPPacket = new TFTPPacket(receiveTFTPacket.getPacketBytes(), 0, receiveTFTPacket.getPacketBytes().length, 
+						sendAddress, sendPort);
+			} catch (TFTPPacketParsingError e) {
+				System.err.println(Globals.getErrorMessage("Error Simulator", "cannot create TFTP Packet"));
 				e.printStackTrace();
 				System.exit(-1);
 			}
 			
-			// shutdown signal
-			// if data packet is empty that means it should shutdown
-			if (receivableDatagramPacket.getLength() == 0) {
-				online = false;
-				continue;
-			}
-			
-			// creates a tftp packet with the received bytes
-			packetBytes = receivableDatagramPacket.getData();
-			tftpPacket = parseTFTPPacket(packetBytes, receivableDatagramPacket.getOffset(), packetBytes.length);
-			
-			// checks if the incoming packet is a request packet
-			// if so then reset the server port back to the main port
-			if (tftpPacket.getPacketType() == TFTPPacketType.RRQ || 
-					tftpPacket.getPacketType() == TFTPPacketType.WRQ) {
-				
-				byte[] receiveDataBytes = receivableDatagramPacket.getData();
-				if (errorSelection == 2 && (errorOp == TFTPPacketType.RRQ || errorOp == TFTPPacketType.WRQ)) {
-					receiveDataBytes = simulateIllegalOperationError(receivableDatagramPacket.getData(), receivableDatagramPacket.getOffset(), 
-							receivableDatagramPacket.getLength(),  errorSelection, errorOp, errorBlock);
-				}
-
-				receivableDatagramPacket = establishNewConnection(receiveDataBytes, receivableDatagramPacket.getSocketAddress());
-				
-				// creates a tftp packet with the received bytes
-				packetBytes = receivableDatagramPacket.getData();
-				tftpPacket = parseTFTPPacket(packetBytes, receivableDatagramPacket.getOffset(), packetBytes.length);
-			}
-	
-			byte[] receiveDataBytes = receivableDatagramPacket.getData();
-			
-			if ((errorSelection == 2) || (errorSelection == 3)) {
-				receiveDataBytes = simulateIllegalOperationError(receiveDataBytes, receivableDatagramPacket.getOffset(), 
-						receivableDatagramPacket.getLength(),  errorSelection, errorOp, errorBlock);
-			}
-		
-			int sendPort = 0;
-			if (((InetSocketAddress) receivableDatagramPacket.getSocketAddress()).getPort() == serverThreadPort) {
-				System.out.println(Globals.getVerboseMessage("Error Simulator", "recieved packet from server."));
-				sendPort = clientPort;
-				
-				System.out.println(Globals.getVerboseMessage("Error Simulator", "sending packet to client..."));
-			}
-			else {
-				System.out.println(Globals.getVerboseMessage("Error Simulator", "recieved packet from client."));
-				sendPort = serverThreadPort;
-				
-				System.out.println(Globals.getVerboseMessage("Error Simulator", "sending packet to server..."));
-			} 
-			
 			if (errorSelection == 3) {
-				try {
-					DatagramSocket tempSocket = new DatagramSocket();
-					sendDatagramPacket = new DatagramPacket(receiveDataBytes, receivableDatagramPacket.getLength(), 
-							InetAddress.getLocalHost(), sendPort);
-					
-					tempSocket.send(sendDatagramPacket);
-					tempSocket.close();
-				} catch (IOException e) {
-					System.err.println(Globals.getErrorMessage("Error Simulator", "cannot send packages"));
-					e.printStackTrace();
-					System.exit(-1);
-				}	
+				TFTPSocket tempTFTPSocket = new TFTPSocket();
+
+				
+				tempTFTPSocket.send(sendTFTPPacket);
+				tempTFTPSocket.close();
 			}
 			else {
-				try {
-					sendDatagramPacket = new DatagramPacket(receiveDataBytes, receivableDatagramPacket.getLength(), 
-							InetAddress.getLocalHost(), sendPort);
-					
-					datagramSocket.send(sendDatagramPacket);
-				} catch (IOException e) {
-					System.err.println(Globals.getErrorMessage("Error Simulator", "cannot send packages"));
-					e.printStackTrace();
-					System.exit(-1);
-				}	
+				tftpSocket.send(sendTFTPPacket);
 			}
+			
+			sendingToServer = !sendingToServer;
+			System.out.println(sendingToServer);
 		}
 		
-		datagramSocket.close();
+		tftpSocket.close();
 	}
 
 	//Checks the PacketType, and block, and simulates the appropriate error on it
-	private byte[] simulateIllegalOperationError(byte[] packet, int offset, int packetLength, int code, TFTPPacketType op, short block) {
-		byte[] corruptedPacketBytes = packet;
+	private TFTPPacket simulateIllegalOperationError(TFTPPacket tftpPacket, int code, TFTPPacketType op, short block) {
+		TFTPPacket corruptedPacket = tftpPacket;
 		
-		//Code to tamper here
-		TFTPPacket tftp = null;
-		try {
-			tftp = new TFTPPacket(packet, offset, packetLength);
-		} catch (TFTPPacketParsingError e) {
-			System.err.println(Globals.getErrorMessage("Error Simulator", "cannot parse TFTP Packet"));
-			e.printStackTrace();
-			System.exit(-1);
-		}
-		
-		if (tftp.getPacketType() == op) {
+		if (tftpPacket.getPacketType() == op) {
 			
 			if ((op == TFTPPacketType.WRQ) || (op == TFTPPacketType.RRQ)) {
 				
 				RRQWRQPacket rrqwrq = null;
 				
 				try {
-					rrqwrq = new RRQWRQPacket(packet, offset, packetLength);
+					rrqwrq = new RRQWRQPacket(tftpPacket);
 				} catch (TFTPPacketParsingError e) {
 					System.err.println(Globals.getErrorMessage("Error Simulator", "cannot parse TFTP DATA Packet"));
 					e.printStackTrace();
@@ -225,9 +182,9 @@ public class ErrorSimulator implements Runnable {
 				
 				
 				if (code == 2) //corrupt opcode
-					corruptedPacketBytes =  corruptOpCode(rrqwrq);
+					corruptedPacket =  corruptOpCode(rrqwrq);
 				else if (code == 3) //corrupt mode
-					corruptedPacketBytes =  corruptMode(rrqwrq);
+					corruptedPacket =  corruptMode(rrqwrq);
 				
 			}
 			
@@ -236,7 +193,7 @@ public class ErrorSimulator implements Runnable {
 					DATAPacket data = null;
 
 					try {
-						data = new DATAPacket(packet, offset, packetLength);
+						data = new DATAPacket(tftpPacket);
 					} catch (TFTPPacketParsingError e) {
 						System.err.println(Globals.getErrorMessage("Error Simulator", "cannot parse TFTP DATA Packet"));
 						e.printStackTrace();
@@ -244,7 +201,7 @@ public class ErrorSimulator implements Runnable {
 					}
 
 					if (data.getBlockNumber() == block)
-						corruptedPacketBytes = corruptOpCode(data);
+						corruptedPacket = corruptOpCode(data);
 				}
 			} 
 			else {
@@ -252,7 +209,7 @@ public class ErrorSimulator implements Runnable {
 					ACKPacket ack = null;
 
 					try {
-						ack = new ACKPacket(packet, offset, packetLength);
+						ack = new ACKPacket(tftpPacket);
 					} catch (TFTPPacketParsingError e) {
 						System.err.println(Globals.getErrorMessage("Error Simulator", "cannot parse TFTP ACK Packet"));
 						e.printStackTrace();
@@ -260,33 +217,43 @@ public class ErrorSimulator implements Runnable {
 					}
 
 					if (ack.getBlockNumber() == block) {
-						corruptedPacketBytes = corruptOpCode(ack);
+						corruptedPacket = corruptOpCode(ack);
 					}
 				}
 			}
 		}
 		
-		return corruptedPacketBytes;
+		return corruptedPacket;
 	}
 	
 	//Hardcodes a wrong OPcode into the packet and returns the byte
-	public byte[] corruptOpCode(TFTPPacket data) {
+	public TFTPPacket corruptOpCode(TFTPPacket tftpPacket) {
 
 		// Corrupt op code
-		byte[] corrupt = data.getPacketBytes();
+		byte[] corruptedBytes = tftpPacket.getPacketBytes();
 		// hardcoded corruption
-		corrupt[0] = 1;
-		corrupt[1] = 5;
+		corruptedBytes[0] = 1;
+		corruptedBytes[1] = 5;
+		
+		TFTPPacket corruptedTFTPPacket = null;
+		try {
+			corruptedTFTPPacket = new TFTPPacket(corruptedBytes, 0, corruptedBytes.length, tftpPacket.getRemoteAddress(), tftpPacket.getRemotePort());
+		} catch (TFTPPacketParsingError e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
-		return corrupt;
+		return corruptedTFTPPacket;
 	}
 	
 	//Hardcodes a wrong mode, and returns a byte
-	public byte[] corruptMode(RRQWRQPacket rrqwrq) {
+	public RRQWRQPacket corruptMode(RRQWRQPacket rrqwrq) {
 		String mode = pickRandomMode(rrqwrq.getMode());
 		
-		RRQWRQPacket corruptRRQWRQPacket = RRQWRQPacket.buildPacket(rrqwrq.getPacketType(), rrqwrq.getFileName(), mode);
-		return corruptRRQWRQPacket.getPacketBytes();
+		RRQWRQPacket corruptRRQWRQPacket = RRQWRQPacket.buildPacket(rrqwrq.getPacketType(), rrqwrq.getFileName(), mode, 
+				rrqwrq.getRemoteAddress(), rrqwrq.getRemotePort());
+		
+		return corruptRRQWRQPacket;
 	}
 	
 	//Picks a random mode
@@ -311,19 +278,19 @@ public class ErrorSimulator implements Runnable {
 			System.exit(-1);
 		}
 		
-		if (!datagramSocket.isClosed()) {
+		if (!tftpSocket.isClosed()) {
 			// temporary socket is created to send a decoy package to the server so that it can stop listening
 			// therefore once it re-evaluates that the boolean online is false it will exit
 			try {
 				DatagramSocket shutdownClient = new DatagramSocket();
-				shutdownClient.send(DatagramPacketBuilder.getShutdownDatagram(InetAddress.getLocalHost(), NetworkConfig.PROXY_PORT));
+				shutdownClient.send(new DatagramPacket(new byte[0], 0, InetAddress.getLocalHost(), NetworkConfig.PROXY_PORT));
 				shutdownClient.close();
 			} catch (UnknownHostException e) {
-				System.err.println(Globals.getErrorMessage("Error Simulator", "cannot find localhost address."));
+				System.err.println(Globals.getErrorMessage("Server", "cannot find localhost address."));
 				e.printStackTrace();
 				System.exit(-1);
 			} catch (IOException e) {
-				System.err.println(Globals.getErrorMessage("Error Simulator", "cannot send packet to server."));
+				System.err.println(Globals.getErrorMessage("Server", "cannot send packet to server."));
 				e.printStackTrace();
 				System.exit(-1);
 			}

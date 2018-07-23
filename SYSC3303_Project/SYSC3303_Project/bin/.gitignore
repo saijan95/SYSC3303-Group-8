@@ -13,3 +13,7 @@
 /ByteConversions.class
 /ServerThread.class
 /RRQServerThread.class
+/tftp/
+/ErrorHandler.class
+/TFTPSocket.class
+/TFTPPacketBuilder.class

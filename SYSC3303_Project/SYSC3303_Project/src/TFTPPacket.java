@@ -1,3 +1,5 @@
+import java.net.InetAddress;
+
 /**
  * This class represents the TFTP packet
  * 
@@ -6,8 +8,12 @@
  */
 public class TFTPPacket {
 	protected byte[] packetBytes;
-	
 	protected short opCode;
+	
+	protected int packetLength;
+	
+	protected InetAddress remoteAddress;
+	protected int remotePort;
 	
 	/**
 	 * Constructor used in the static buildPacket method
@@ -20,11 +26,25 @@ public class TFTPPacket {
 	 * @param packetBytes list of bytes that form the packet
 	 * @throws TFTPPacketParsingError
 	 */
-	public TFTPPacket(byte[] packetBytes, int offset, int packetLength) throws TFTPPacketParsingError {		
+	public TFTPPacket(byte[] packetBytes, int offset, int packetLength, InetAddress remoteAddress, int remotePort) throws TFTPPacketParsingError {		
 		byte[] data = new byte[packetLength];
 		System.arraycopy(packetBytes, offset, data, 0, packetLength);
+		
 		this.packetBytes = data;
+		this.packetLength = packetLength;
+	
+		this.remoteAddress = remoteAddress;
+		this.remotePort = remotePort;
+		
 		parseOPCode();
+	}
+	
+	protected TFTPPacket(TFTPPacket tftpPacket) {
+		this.packetBytes = tftpPacket.packetBytes;
+		this.packetLength = tftpPacket.packetLength;
+		this.opCode = tftpPacket.opCode;
+		this.remoteAddress = tftpPacket.remoteAddress;
+		this.remotePort = tftpPacket.remotePort;
 	}
 	
 	/**
@@ -38,9 +58,6 @@ public class TFTPPacket {
 		
 		byte[] opCodeBytes = {packetBytes[0], packetBytes[1]};
 		opCode = ByteConversions.bytesToShort(opCodeBytes);
-		
-		if (opCode < 1 || opCode > 5) 
-			throw new TFTPPacketParsingError("invalid OPCode");
 	}
 	
 	/**
@@ -52,6 +69,10 @@ public class TFTPPacket {
 		return packetBytes;
 	}
 	
+	public int getPacketLength() {
+		return packetLength;
+	}
+	
 	/**
 	 * Getter function for returning OP code
 	 * 
@@ -59,6 +80,14 @@ public class TFTPPacket {
 	 */
 	public short getOPCode() {
 		return opCode;
+	}
+	
+	public InetAddress getRemoteAddress() {
+		return remoteAddress;
+	}
+	
+	public int getRemotePort() {
+		return remotePort;
 	}
 	
 	/**

@@ -1,3 +1,4 @@
+import java.net.InetAddress;
 import java.util.Arrays;
 
 /**
@@ -8,8 +9,13 @@ import java.util.Arrays;
  */
 public class ERRORPacket extends TFTPPacket {
 	public static final short OP_CODE = 5;
+	
+	public static final short FILE_NOT_FOUND = 1;
+	public static final short ACCESS_VIOLATION = 2;
+	public static final short DISK_FULL = 3;
 	public static final short ILLEGAL_TFTP_OPERATION = 4;
 	public static final short UNKNOWN_TID = 5;
+	public static final short FILE_EXISTS = 6;
 	
 	private short errorCode; 
 	private String errorMessage;
@@ -27,8 +33,8 @@ public class ERRORPacket extends TFTPPacket {
 	 * @param packetBytes list of bytes that form the packet
 	 * @throws TFTPPacketParsingError
 	 */
-	public ERRORPacket(byte[] packetBytes, int offset, int packetLength) throws TFTPPacketParsingError {
-		super(packetBytes, offset, packetLength);
+	public ERRORPacket(TFTPPacket tftpPacket) throws TFTPPacketParsingError {
+		super(tftpPacket);
 		parseErrorCode();
 		parseErrorMessage();
 	}
@@ -102,7 +108,7 @@ public class ERRORPacket extends TFTPPacket {
 	 * @return ERROR packet containing the array of bytes that form the packet and the
 	 * 					  initialized attributes
 	 */
-	public static ERRORPacket buildPacket(short errorCode, String errorMessage) {
+	public static ERRORPacket buildPacket(short errorCode, String errorMessage, InetAddress remoteAddress, int remotePort) {
 		ERRORPacket errorPacket = new ERRORPacket();
 		
 		// convert error code and error message into bytes
@@ -138,6 +144,8 @@ public class ERRORPacket extends TFTPPacket {
 		errorPacket.errorCode = errorCode;
 		errorPacket.errorMessage = errorMessage;
 		errorPacket.packetBytes = packetBytes;
+		errorPacket.remoteAddress = remoteAddress;
+		errorPacket.remotePort = remotePort;
 		
 		return errorPacket;
 	}

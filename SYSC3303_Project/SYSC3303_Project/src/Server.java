@@ -2,30 +2,20 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.SocketAddress;
-import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Scanner;
 
+/**
+ * This class represents a server.
+ * It is used to accept incoming WRQ or RRQ requests 
+ */
 public class Server implements Runnable {
-	/**
-	 * This class represents a server.
-	 * It is used to accept incoming WRQ or RRQ requests 
-	 */
-	private boolean online;
-	private DatagramSocket datagramSocket;
+	private TFTPSocket tftpSocket;
+	private ErrorHandler errorHandler;
 	
 	public Server() {
-		try {
-			// create a datagram socket to establish a connection with incoming
-			// RRQ and WRQ connections
-			datagramSocket = new DatagramSocket(NetworkConfig.SERVER_PORT);
-		} catch (SocketException e) {
-			System.err.println(Globals.getErrorMessage("Server", "cannot create datagram socket on specified port"));
-			e.printStackTrace();
-			System.exit(-1);
-		}
-	
+		tftpSocket = new TFTPSocket(NetworkConfig.SERVER_PORT);
+		errorHandler = new ErrorHandler(tftpSocket);
 	}
 	
 	@Override
@@ -33,53 +23,18 @@ public class Server implements Runnable {
 		listen();
 	}
 	
-	private void sendIllegalOperationErrorPacket(String errorMessage, SocketAddress returnAddress) {
-		DatagramPacket errorDatagramPacket = DatagramPacketBuilder.getERRORDatagram(ERRORPacket.ILLEGAL_TFTP_OPERATION, errorMessage, returnAddress);
-		
-		System.err.println(Globals.getErrorMessage("RRQServerThread", String.format("sending error packet, errorCode: %d, errorMessage: %s", ERRORPacket.ILLEGAL_TFTP_OPERATION, errorMessage)));
-		
-		try {
-			datagramSocket.send(errorDatagramPacket);
-		} catch (IOException e) {
-			System.err.println(Globals.getErrorMessage("RRQServerThread", "cannot send ERROR TFTP packet"));
-			e.printStackTrace();
-			System.exit(-1);
-		}
-	}
-	
 	private void listen() {
-		online = true;
-		
-		while (online) {
-			DatagramPacket receiveDatagramPacket = DatagramPacketBuilder.getReceivalbeDatagram();
-			
+		while (!tftpSocket.isClosed()) {
 			System.out.println(Globals.getVerboseMessage("Server", "waiting for packet..."));
 			
-			try {
-				datagramSocket.receive(receiveDatagramPacket);
-			} catch (IOException e) {
-				System.err.println(Globals.getErrorMessage("Server", "cannot receive packages"));
-				e.printStackTrace();
-				System.exit(-1);
-			}
+			TFTPPacket requestPacket = tftpSocket.receive();
 			
-			// shutdown signal
-			// if data packet is empty that means it should shutdown
-			if (receiveDatagramPacket.getLength() == 0) {
-				online = false;
-				continue;
-			}
-			
-			byte[] receiveDataBytes = receiveDatagramPacket.getData();
-			
-			
-			// classify if the receive datagram packet it RRQ or WRQ
-			TFTPPacket requestPacket = null;
-			try {
-				requestPacket = new TFTPPacket(receiveDataBytes, receiveDatagramPacket.getOffset(), receiveDatagramPacket.getLength());
-			} catch (TFTPPacketParsingError e) {
-				System.err.println(Globals.getErrorMessage("Server", "cannot parse TFTP packet"));
-				sendIllegalOperationErrorPacket("invalid RRQ/WRQ packet", receiveDatagramPacket.getSocketAddress());
+			/*
+			 * If the received TFTP packet cannot be parsed TFTP socket returns a null
+			 * If the received TFTP packet is null then send an ERROR packet with error code 4
+			 */
+			if (requestPacket == null) {
+				// continue listening for new connections
 				continue;
 			}
 			
@@ -87,17 +42,25 @@ public class Server implements Runnable {
 			
 			if (packetType == TFTPPacketType.RRQ) {
 				System.out.println(Globals.getVerboseMessage("Server", "RRQ request recevied."));
-				RRQServerThread rrqServerThread = new RRQServerThread(receiveDatagramPacket);
+				
+				// create a server thread for handling read requests
+				RRQServerThread rrqServerThread = new RRQServerThread(requestPacket);
 				rrqServerThread.start();
 			}
 			else if (packetType == TFTPPacketType.WRQ) {
 				System.out.println(Globals.getVerboseMessage("Server", "WRQ request received."));
-				WRQServerThread wrqServerThread = new WRQServerThread(receiveDatagramPacket);
+				
+				// create a server thread for handling write requests
+				WRQServerThread wrqServerThread = new WRQServerThread(requestPacket);
 				wrqServerThread.start();
+			}
+			else {
+				System.err.println(Globals.getErrorMessage("Server", "invalid request packet"));
+				errorHandler.sendIllegalOperationErrorPacket("cannot parse TFTP packet", requestPacket.getRemoteAddress(), requestPacket.getRemotePort());
 			}
 		}
 		
-		datagramSocket.close();
+		tftpSocket.close();
 	}
 	
 	public void shutdown() {
@@ -112,12 +75,12 @@ public class Server implements Runnable {
 			System.exit(-1);
 		}
 		
-		if (!datagramSocket.isClosed()) {
+		if (!tftpSocket.isClosed()) {
 			// temporary socket is created to send a decoy package to the server so that it can stop listening
 			// therefore once it re-evaluates that the boolean online is false it will exit
 			try {
 				DatagramSocket shutdownClient = new DatagramSocket();
-				shutdownClient.send(DatagramPacketBuilder.getShutdownDatagram(InetAddress.getLocalHost(), NetworkConfig.SERVER_PORT));
+				shutdownClient.send(new DatagramPacket(new byte[0], 0, InetAddress.getLocalHost(), NetworkConfig.SERVER_PORT));
 				shutdownClient.close();
 			} catch (UnknownHostException e) {
 				System.err.println(Globals.getErrorMessage("Server", "cannot find localhost address."));
