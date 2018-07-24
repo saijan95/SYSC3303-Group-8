@@ -1,5 +1,6 @@
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 
@@ -47,6 +48,12 @@ public class FileManager {
 			fileInputStream.read(fileBytes);
 			fileInputStream.close();
 			res.fileBytes = fileBytes;
+		} catch (FileNotFoundException e) {
+			// set fileNotFound to true
+			res.fileNotFound = true;
+			
+			// set error flag
+			res.error = true;
 		} catch (IOException e) {
 			System.err.println(Globals.getErrorMessage("FileManager", "cannot read file."));
 			e.printStackTrace();
@@ -55,12 +62,6 @@ public class FileManager {
 			// then set the accessViolation flag to true
 			if (e.getMessage().contains("Permission denied"))
 				res.accessViolation = true;
-			
-			// if the error message contains "cannot find the file"
-			// then set fileNotFound to true
-			if (e.getMessage().contains("cannot find the file"))
-				res.fileNotFound = true;
-			
 			
 			// set error flag
 			res.error = true;

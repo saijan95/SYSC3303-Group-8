@@ -227,7 +227,7 @@ public class ErrorSimulator implements Runnable {
 	}
 	
 	//Hardcodes a wrong OPcode into the packet and returns the byte
-	public TFTPPacket corruptOpCode(TFTPPacket tftpPacket) {
+	private TFTPPacket corruptOpCode(TFTPPacket tftpPacket) {
 
 		// Corrupt op code
 		byte[] corruptedBytes = tftpPacket.getPacketBytes();
@@ -247,7 +247,7 @@ public class ErrorSimulator implements Runnable {
 	}
 	
 	//Hardcodes a wrong mode, and returns a byte
-	public RRQWRQPacket corruptMode(RRQWRQPacket rrqwrq) {
+	private RRQWRQPacket corruptMode(RRQWRQPacket rrqwrq) {
 		String mode = pickRandomMode(rrqwrq.getMode());
 		
 		RRQWRQPacket corruptRRQWRQPacket = RRQWRQPacket.buildPacket(rrqwrq.getPacketType(), rrqwrq.getFileName(), mode, 
@@ -257,7 +257,7 @@ public class ErrorSimulator implements Runnable {
 	}
 	
 	//Picks a random mode
-	public String pickRandomMode(String x) {
+	private String pickRandomMode(String x) {
 		String[] modes = {"netascii", "octet", "mail"};
 		int random = 0;
 		while (modes[random] == x) {
