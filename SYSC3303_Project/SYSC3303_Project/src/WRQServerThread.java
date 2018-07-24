@@ -168,7 +168,16 @@ public class WRQServerThread extends Thread {
 			byte[] fileData = dataPacket.getDataBytes();
 
 			// write file data from DATA packet to hard drive
-			fileManager.writeFile(fileName, fileData);
+			FileManager.FileManagerResult res = fileManager.writeFile(fileName, fileData);
+			
+			// if error occurred end connection
+			if (res.error) {
+				// access violation error will send an error packet with error code 2 and the connection
+				if (res.accessViolation)
+					errorHandler.sendAccessViolationErrorPacket(String.format("write access denied to file: %s", fileName), remoteAddress, remotePort);
+				
+				return;
+			}
 			
 			System.out.println(Globals.getVerboseMessage("WRQServerThread", String.format("finsihed writing data to file %s", fileName)));
 			

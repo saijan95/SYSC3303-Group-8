@@ -146,7 +146,19 @@ public class RRQServerThread extends Thread {
 		String fileName = rrqPacket.getFileName();
 		
 		// read the whole file requested by the client
-		byte[] fileData = fileManager.readFile(fileName);
+		FileManager.FileManagerResult res = fileManager.readFile(fileName);
+		byte[] fileData = null;
+		
+		if (!res.error) {
+			fileData = res.fileBytes;
+		}
+		else {
+			// access violation error will send an error packet with error code 2 and the connection
+			if (res.accessViolation) 
+				errorHandler.sendAccessViolationErrorPacket(String.format("read access denied to file: %s", fileName), remoteAddress, remotePort);
+				
+			return;
+		}
 		
 		// create list of DATA datagram packets that contain up to 512 bytes of file data
 		dataPacketStack = TFTPPacketBuilder.getStackOfDATADatagramPackets(fileData, remoteAddress, remotePort);

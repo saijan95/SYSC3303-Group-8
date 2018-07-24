@@ -313,7 +313,19 @@ public class Client {
         if (ackPacket.getBlockNumber() == 0) {
 
 	        // reads a file on client side to create on the server side
-	        byte[] fileData = fileManager.readFile(filePath);
+        	FileManager.FileManagerResult res = fileManager.readFile(filePath);
+    		byte[] fileData = null;
+    		
+    		if (!res.error) {
+    			fileData = res.fileBytes;
+    		}
+    		else {
+    			// access violation error will send an error packet with error code 2 and the connection
+    			if (res.accessViolation) 
+    				errorHandler.sendAccessViolationErrorPacket(String.format("read access denied to file: %s", fileName), serverAddress, serverPort);
+    				
+    			return;
+    		}
 	        
 	        // create list of DATA datagram packets that contain up to 512 bytes of file data
 	        Queue<DATAPacket> dataPacketStack = TFTPPacketBuilder.getStackOfDATADatagramPackets(fileData, serverAddress, serverPort);

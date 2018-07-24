@@ -1,10 +1,7 @@
 import java.io.File;
-import java.io.FileNotFoundException;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 
 /**
  * This class provides an interface for objects to write or read files from hard drive
@@ -13,6 +10,20 @@ import java.nio.file.Paths;
  */
 
 public class FileManager {
+	// directory where the file that are transferred will be saved
+	private static String destinationDirectoryStr = "transfered_files";
+	
+	/**
+	 * This class has the necessary variables to indicate the result
+	 * of read or write to the hard drive
+	 * 
+	 * @author Group 8
+	 */
+	public class FileManagerResult {
+		public byte[] fileBytes = null;
+		boolean accessViolation = false;
+		boolean error = false;
+	}
 
 	public FileManager() {}
 	
@@ -21,56 +32,94 @@ public class FileManager {
 	 * 
 	 * @param fileName: fileName
 	 * 
-	 * Return list of bytes 
+	 * Return FileManagerResult containing the list of bytes read or error flagged
 	 */
-	public byte[] readFile(String fileName) {		
-		Path path = Paths.get(fileName);
+	public FileManagerResult readFile(String fileName) {		
+		FileManagerResult res = new FileManagerResult();
 		
-		byte[] fileBytes = null;
+		File file = new File(fileName);
+		
+		byte[] fileBytes = new byte[(int)file.length()];
+		
 		try {
-			// read all contents of the file
-			fileBytes = Files.readAllBytes(path);
+			FileInputStream fileInputStream = new FileInputStream(file); 
+			fileInputStream.read(fileBytes);
+			fileInputStream.close();
+			res.fileBytes = fileBytes;
 		} catch (IOException e) {
 			System.err.println(Globals.getErrorMessage("FileManager", "cannot read file."));
 			e.printStackTrace();
-			System.exit(-1);
+			
+			// if the error message contains "Permission denied"
+			// then set the accessViolation flag to true
+			if (e.getMessage().contains("Permission denied"))
+				res.accessViolation = true;
+			
+			
+			// set error flag
+			res.error = true;
 		}
 		
-		return fileBytes;
+		return res;
 	}
 	
 	/**
-	 * Writes file data in bytes to a harddrive with the given file name
+	 * Writes file data in bytes to a hard drive with the given file name
 	 * 
 	 * @param fileName: file name
 	 * @param data: file data in byte form
+	 * 
+	 * Return FileManagerResult containing the errors flags 
 	 */
-	public void writeFile(String fileName, byte[] data) {
+	public FileManagerResult writeFile(String fileName, byte[] data) {
+		FileManagerResult res = new FileManagerResult();
+		
+		fileName = System.getProperty("user.dir") + File.separator + destinationDirectoryStr + File.separator + fileName;
 		File file = new File(fileName);
 		
 		// create a new file if it does not exist
 		try {
+			if (!file.getParentFile().exists())
+				file.getParentFile().mkdirs();
+			
 			file.createNewFile();
 		} catch (IOException e) {
-			System.err.println(Globals.getErrorMessage("FileManager", String.format("cannot create file %s.", fileName)));
+			System.err.println(Globals.getErrorMessage("FileManager", "cannot read file."));
 			e.printStackTrace();
-			System.exit(-1);
+			
+			// if the error message contains "Permission denied"
+			// then set the accessViolation flag to true
+			if (e.getMessage().contains("Permission denied"))
+				res.accessViolation = true;
+			
+			// set error flag
+			res.error = true;
 		}
 		
+		// stop the write function if an error occurred
+		if (res.error) {
+			return res;
+		}
+			
 		// write to file
 		try {
 			// append to previous data on file
 			FileOutputStream fileOutputStream = new FileOutputStream(file, true);
 			fileOutputStream.write(data);
 			fileOutputStream.close();
-		} catch (FileNotFoundException e) {
-			System.err.println(Globals.getErrorMessage("FileManager", String.format("cannot find file %s.", fileName)));
-			e.printStackTrace();
-			System.exit(-1);
 		} catch (IOException e) {
-			System.err.println(Globals.getErrorMessage("FileManager", String.format("cannot write to file %s.", fileName)));
+			System.err.println(Globals.getErrorMessage("FileManager", "cannot read file."));
 			e.printStackTrace();
-			System.exit(-1);
+			
+			// if the error message contains "Permission denied"
+			// then set the accessViolation flag to true
+			if (e.getMessage().contains("Permission denied"))
+				res.accessViolation = true;
+			
+			// set error flag
+			res.error = true;
 		}
+		
+		return res;
 	}
 }
