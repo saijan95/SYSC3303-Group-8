@@ -256,7 +256,6 @@ public class Client {
             System.exit(-1);
         }
 
-        
 	    short nextBlockNumber = 1; // expect to receive DATA with valid block number
 	   
 	   	// receive all data packets from server that wants to transfer a file.
@@ -275,6 +274,18 @@ public class Client {
 	        String fileDataStr = ByteConversions.bytesToString(fileData);
 	        
 	        System.out.println(Globals.getVerboseMessage("Client", String.format("received file data: %s", fileDataStr)));
+	        
+	        // write file on client side
+            FileManager.FileManagerResult res = fileManager.writeFile(fileName, fileData);           
+            if (res.error) {
+                // access violation error will send an error packet with error code 2 and the connection
+                if (res.accessViolation) 
+                    errorHandler.sendAccessViolationErrorPacket(String.format("read access denied to file: %s", fileName), serverAddress, serverPort);
+                // disk full error will send an error packet with error code 3 and close the connection
+                else if (res.diskFull)
+                    errorHandler.sendDiskFullErrorPacket(String.format("Not enough disk space for file: %s", fileName), serverAddress, serverPort);
+                return;
+            }
 	    
 	        // save the length of the received packet
 	        fileDataLen = dataPacket.getPacketLength();
@@ -323,8 +334,7 @@ public class Client {
     			// access violation error will send an error packet with error code 2 and the connection
     			if (res.accessViolation) 
     				errorHandler.sendAccessViolationErrorPacket(String.format("read access denied to file: %s", fileName), serverAddress, serverPort);
-    			else if (res.fileNotFound) 
-    				errorHandler.sendFileNotFoundErrorPacket(String.format("file not found: %s", fileName), serverAddress, serverPort);
+    				
     			return;
     		}
 	        

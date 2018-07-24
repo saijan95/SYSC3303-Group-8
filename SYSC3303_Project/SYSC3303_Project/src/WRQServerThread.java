@@ -175,7 +175,9 @@ public class WRQServerThread extends Thread {
 				// access violation error will send an error packet with error code 2 and the connection
 				if (res.accessViolation)
 					errorHandler.sendAccessViolationErrorPacket(String.format("write access denied to file: %s", fileName), remoteAddress, remotePort);
-				
+				// disk full error will send an error packet with error code 3 and close the connection
+				else if (res.diskFull)
+				    errorHandler.sendDiskFullErrorPacket(String.format("Not enough disk space for file: %s", fileName), remoteAddress, remotePort);
 				return;
 			}
 			
