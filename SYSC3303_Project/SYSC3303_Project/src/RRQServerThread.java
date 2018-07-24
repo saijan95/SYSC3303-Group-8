@@ -156,6 +156,9 @@ public class RRQServerThread extends Thread {
 			// access violation error will send an error packet with error code 2 and the connection
 			if (res.accessViolation) 
 				errorHandler.sendAccessViolationErrorPacket(String.format("read access denied to file: %s", fileName), remoteAddress, remotePort);
+			// file not found error will send an error packet with error code 1 and the connection
+			else if (res.fileNotFound)
+				errorHandler.sendFileNotFoundErrorPacket(String.format("file not found: %s", fileName), remoteAddress, remotePort);
 				
 			return;
 		}

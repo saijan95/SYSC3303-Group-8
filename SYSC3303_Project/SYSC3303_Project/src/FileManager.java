@@ -22,6 +22,7 @@ public class FileManager {
 	public class FileManagerResult {
 		public byte[] fileBytes = null;
 		boolean accessViolation = false;
+		boolean fileNotFound = false;
 		boolean error = false;
 	}
 
@@ -54,6 +55,11 @@ public class FileManager {
 			// then set the accessViolation flag to true
 			if (e.getMessage().contains("Permission denied"))
 				res.accessViolation = true;
+			
+			// if the error message contains "cannot find the file"
+			// then set fileNotFound to true
+			if (e.getMessage().contains("cannot find the file"))
+				res.fileNotFound = true;
 			
 			
 			// set error flag
