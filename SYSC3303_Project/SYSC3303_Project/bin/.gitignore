@@ -18,3 +18,4 @@
 /TFTPSocket.class
 /TFTPPacketBuilder.class
 /FileManager$FileManagerResult.class
+/PacketHandler.class
