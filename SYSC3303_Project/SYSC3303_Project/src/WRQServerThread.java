@@ -94,6 +94,8 @@ public class WRQServerThread extends Thread {
 				if (res.accessViolation)
 					errorHandler.sendAccessViolationErrorPacket(String.format("write access denied to file: %s", fileName), remoteAddress, remotePort);
 				// disk full error will send an error packet with error code 3 and close the connection
+				else if (res.fileAlreadyExist)
+					errorHandler.sendFileExistsErrorPacket(String.format("file already exists: %s", fileName), remoteAddress, remotePort);
 				else if (res.diskFull)
 				    errorHandler.sendDiskFullErrorPacket(String.format("Not enough disk space for file: %s", fileName), remoteAddress, remotePort);
 				return;
