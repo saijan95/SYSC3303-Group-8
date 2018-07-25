@@ -23,6 +23,7 @@ public class FileManager {
 		public byte[] fileBytes = null;
 		boolean accessViolation = false;
 		boolean fileNotFound = false;
+		boolean fileAlreadyExist = false;
 		boolean diskFull = false;
 		boolean error = false;
 	}
@@ -90,6 +91,10 @@ public class FileManager {
 				file.getParentFile().mkdirs();
 			
 			file.createNewFile();
+			if (file.exists()) {
+				res.fileAlreadyExist = true;
+				res.error = true;
+			}
 		} catch (IOException e) {
 			System.err.println(Globals.getErrorMessage("FileManager", "cannot read file."));
 			e.printStackTrace();
