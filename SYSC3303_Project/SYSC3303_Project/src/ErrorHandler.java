@@ -35,6 +35,6 @@ public class ErrorHandler {
 	}
 	
 	public void sendFileExistsErrorPacket(String errorMessage, InetAddress remoteAddress, int remotePort) {
-		sendErrorPacket(ERRORPacket.ILLEGAL_TFTP_OPERATION, errorMessage, remoteAddress, remotePort);
+		sendErrorPacket(ERRORPacket.FILE_EXISTS, errorMessage, remoteAddress, remotePort);
 	}
 }
