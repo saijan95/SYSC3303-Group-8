@@ -63,6 +63,22 @@ public class WRQServerThread extends Thread {
 		
 		packetHandler = new PacketHandler(tftpSocket, errorHandler, remoteAddress, remotePort);
 		
+		// creates file if it does not exist
+		String fileName = wrqPacket.getFileName();
+		FileManager.FileManagerResult res = fileManager.createFile(fileName);
+		
+		if (res.error) {
+			// access violation error will send an error packet with error code 2 and the connection
+			if (res.accessViolation)
+				errorHandler.sendAccessViolationErrorPacket(String.format("write access denied to file: %s", fileName), remoteAddress, remotePort);
+			// disk full error will send an error packet with error code 3 and close the connection
+			else if (res.fileAlreadyExist)
+				errorHandler.sendFileExistsErrorPacket(String.format("file already exists: %s", fileName), remoteAddress, remotePort);
+			else if (res.diskFull)
+			    errorHandler.sendDiskFullErrorPacket(String.format("Not enough disk space for file: %s", fileName), remoteAddress, remotePort);
+			return;
+		}
+		
 		// send ACK packet to client in response to the write request
 		packetHandler.sendACKPacket((short) 0);
 		
@@ -82,11 +98,10 @@ public class WRQServerThread extends Thread {
 				break;
 			}
 			
-			String fileName = wrqPacket.getFileName();
 			byte[] fileData = dataPacket.getDataBytes();
 
 			// write file data from DATA packet to hard drive
-			FileManager.FileManagerResult res = fileManager.writeFile(fileName, fileData);
+			res = fileManager.writeFile(fileName, fileData);
 			
 			// if error occurred end connection
 			if (res.error) {
