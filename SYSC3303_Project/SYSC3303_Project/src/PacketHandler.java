@@ -1,7 +1,7 @@
 import java.net.InetAddress;
 
 /**
- * This class handles the packet sending and receving
+ * This class handles the packet sending and receiving
  * 
  * @author Group 8
  *

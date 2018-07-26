@@ -174,6 +174,9 @@ public class Client {
     			// access violation error will send an error packet with error code 2 and the connection
     			if (res.accessViolation) 
     				errorHandler.sendAccessViolationErrorPacket(String.format("read access denied to file: %s", fileName), serverAddress, serverPort);
+    			// file not found error will send an error packet with error code 1 and the connection
+    			else if (res.fileNotFound)
+    				errorHandler.sendFileNotFoundErrorPacket(String.format("file not found: %s", fileName), serverAddress, serverPort);
     				
     			return;
     		}
