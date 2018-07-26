@@ -107,6 +107,24 @@ public class Client {
         		return;
         	}
         	
+        	FileManager.FileManagerResult res;
+        	if (dataPacket.getBlockNumber() == 1) {
+        		res = fileManager.createFile(fileName);
+        		
+        		if (res.error) {
+        			// access violation error will send an error packet with error code 2 and the connection
+        			if (res.accessViolation)
+        				errorHandler.sendAccessViolationErrorPacket(String.format("write access denied to file: %s", fileName), serverAddress, serverPort);
+        			// disk full error will send an error packet with error code 3 and close the connection
+        			else if (res.fileAlreadyExist)
+        				errorHandler.sendFileExistsErrorPacket(String.format("file already exists: %s", fileName), serverAddress, serverPort);
+        			else if (res.diskFull)
+        				errorHandler.sendDiskFullErrorPacket(String.format("Not enough disk space for file: %s", fileName), serverAddress, serverPort);
+        			return;
+        		}
+        		 
+        	}
+        	
 	        // gets the data bytes from the DATA packet and converts it into a string
         	byte[] fileData = dataPacket.getDataBytes();
 	        String fileDataStr = ByteConversions.bytesToString(fileData);
@@ -114,16 +132,18 @@ public class Client {
 	        System.out.println(Globals.getVerboseMessage("Client", String.format("received file data: %s", fileDataStr)));
 	        
 	        // write file on client side
-            FileManager.FileManagerResult res = fileManager.writeFile(fileName, fileData);           
+            res = fileManager.writeFile(fileName, fileData);           
             if (res.error) {
-                // access violation error will send an error packet with error code 2 and the connection
-                if (res.accessViolation) 
-                    errorHandler.sendAccessViolationErrorPacket(String.format("read access denied to file: %s", fileName), serverAddress, serverPort);
-                // disk full error will send an error packet with error code 3 and close the connection
-                else if (res.diskFull)
-                    errorHandler.sendDiskFullErrorPacket(String.format("Not enough disk space for file: %s", fileName), serverAddress, serverPort);
-                return;
-            }
+    			// access violation error will send an error packet with error code 2 and the connection
+    			if (res.accessViolation)
+    				errorHandler.sendAccessViolationErrorPacket(String.format("write access denied to file: %s", fileName), serverAddress, serverPort);
+    			// disk full error will send an error packet with error code 3 and close the connection
+    			else if (res.fileAlreadyExist)
+    				errorHandler.sendFileExistsErrorPacket(String.format("file already exists: %s", fileName), serverAddress, serverPort);
+    			else if (res.diskFull)
+    			    errorHandler.sendDiskFullErrorPacket(String.format("Not enough disk space for file: %s", fileName), serverAddress, serverPort);
+    			return;
+    		}
 	    
 	        // save the length of the received packet
 	        fileDataLen = dataPacket.getPacketLength();
