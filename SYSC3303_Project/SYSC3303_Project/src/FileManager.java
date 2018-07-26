@@ -52,9 +52,15 @@ public class FileManager {
 			res.fileBytes = fileBytes;
 		} catch (FileNotFoundException e) {	
 			
-			// if the error message contains "cannot find the file"
-			// then set fileNotFound to true
-			res.fileNotFound = true;
+			
+			// if the error message contains "Permission denied"
+			// then set the accessViolation flag to true
+			if (e.getMessage().contains("Permission denied"))
+				res.accessViolation = true;
+			else
+				// if the error message contains "cannot find the file"
+				// then set fileNotFound to true
+				res.fileNotFound = true;
 			
 			// set error flag
 			res.error = true;
@@ -76,28 +82,28 @@ public class FileManager {
 	}
 	
 	/**
-	 * Writes file data in bytes to a hard drive with the given file name
+	 * Method used to create a file if it is not already there
 	 * 
-	 * @param fileName: file name
-	 * @param data: file data in byte form
-	 * 
-	 * Return FileManagerResult containing the errors flags 
+	 * @param  fileName
+	 * @return FileManagerResult containing the list of bytes read or error flagged
 	 */
-	public FileManagerResult writeFile(String fileName, byte[] data) {
+	public FileManagerResult createFile(String fileName) {
 		FileManagerResult res = new FileManagerResult();
 		
-		fileName = System.getProperty("user.dir") + File.separator + destinationDirectoryStr + File.separator + fileName;
-		File file = new File(fileName);
+		String fileNameFull = System.getProperty("user.dir") + File.separator + destinationDirectoryStr + File.separator + fileName;
+		File file = new File(fileNameFull);
 		
 		// create a new file if it does not exist
 		try {
 			if (!file.getParentFile().exists())
 				file.getParentFile().mkdirs();
 			
-			file.createNewFile();
 			if (file.exists()) {
 				res.fileAlreadyExist = true;
 				res.error = true;
+			}
+			else {
+				file.createNewFile();
 			}
 		} catch (IOException e) {
 			System.err.println(Globals.getErrorMessage("FileManager", "cannot read file."));
@@ -117,17 +123,38 @@ public class FileManager {
 			res.error = true;
 		}
 		
-		// stop the write function if an error occurred
-		if (res.error) {
-			return res;
-		}
-			
+		return res;
+	}
+	
+	/**
+	 * Writes file data in bytes to a hard drive with the given file name
+	 * 
+	 * @param fileName: file name
+	 * @param data: file data in byte form
+	 * 
+	 * Return FileManagerResult containing the errors flags 
+	 */
+	public FileManagerResult writeFile(String fileName, byte[] data) {
+		FileManagerResult res = new FileManagerResult();
+		
+		String fileNameFull = System.getProperty("user.dir") + File.separator + destinationDirectoryStr + File.separator + fileName;
+		File file = new File(fileNameFull);
+		
 		// write to file
 		try {
 			// append to previous data on file
 			FileOutputStream fileOutputStream = new FileOutputStream(file, true);
 			fileOutputStream.write(data);
 			fileOutputStream.close();
+		} catch (FileNotFoundException e) {	
+			
+			// if the error message contains "cannot find the file"
+			// then set fileNotFound to true
+			res.fileNotFound = true;
+			
+			// set error flag
+			res.error = true;
+			
 		} catch (IOException e) {
 			System.err.println(Globals.getErrorMessage("FileManager", "cannot read file."));
 			e.printStackTrace();

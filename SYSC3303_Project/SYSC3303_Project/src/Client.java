@@ -132,6 +132,8 @@ public class Client {
 	        packetHandler.sendACKPacket(nextBlockNumber);
 	        nextBlockNumber++;
         }
+        
+        System.out.println(Globals.getVerboseMessage("Client", "Finished with reading file."));
     }
     
     /**
@@ -198,6 +200,8 @@ public class Client {
 				dataPacketStack.poll();
 	        }
         }
+        
+        System.out.println(Globals.getVerboseMessage("Client", "Finished with writing file."));
     }
     
     /**

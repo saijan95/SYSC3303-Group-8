@@ -104,7 +104,7 @@ public class TFTPPacket {
 			return TFTPPacketType.DATA;
 		else if (opCode == 4)
 			return TFTPPacketType.ACK;
-		else if (opCode == 4)
+		else if (opCode == 5)
 			return TFTPPacketType.ERROR;
 		else
 			return TFTPPacketType.INVALID;
