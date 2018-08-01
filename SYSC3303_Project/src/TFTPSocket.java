@@ -49,7 +49,7 @@ public class TFTPSocket {
 		}
 	}
 	
-	public TFTPPacket receive() throws SocketTimeoutException {
+	public TFTPPacket receive() throws SocketTimeoutException, IOException {
 		TFTPPacket tftpPacket = null;
 		
 		byte[] receiveBytes = new byte[NetworkConfig.DATAGRAM_PACKET_MAX_LEN];
@@ -60,14 +60,8 @@ public class TFTPSocket {
 			return null;
 		}
 					
-		try {
-			datagramSocket.receive(receiveDatagramPacket);
-		} catch (IOException e) {
-			System.err.println(Globals.getErrorMessage("TFTPSocket", "oops... the connection broke"));
-			e.printStackTrace();
-			System.exit(-1);
-		}
-		
+		datagramSocket.receive(receiveDatagramPacket);
+
 		// shutdown signal
 		// if data packet is empty that means it should shutdown
 		if (receiveDatagramPacket.getLength() == 0) {

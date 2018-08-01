@@ -35,6 +35,10 @@ public class Server implements Runnable {
 				String errorMessage = "Socket timed out. Cannot receive TFTP packet";
 				System.err.println(Globals.getErrorMessage("Server", errorMessage));	
 				continue;
+			} catch (IOException e) {
+				System.err.println(Globals.getErrorMessage("Server", "oops... the connection broke"));
+				e.printStackTrace();
+				System.exit(-1);
 			}
 			
 			/*

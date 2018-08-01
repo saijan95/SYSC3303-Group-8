@@ -22,7 +22,9 @@ public class WRQServerThread extends Thread {
 	 */
 	public WRQServerThread(TFTPPacket tftpPacket) {
 		this.requestPacket = tftpPacket;
-		tftpSocket = new TFTPSocket(0);
+		
+		//tftpSocket = new TFTPSocket(0);
+		tftpSocket = new TFTPSocket(NetworkConfig.TIMEOUT_TIME);
 		
 		fileManager = new FileManager();
 		errorHandler = new ErrorHandler(tftpSocket);

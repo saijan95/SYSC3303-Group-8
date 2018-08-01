@@ -1,3 +1,4 @@
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.SocketTimeoutException;
 
@@ -74,6 +75,10 @@ public class PacketHandler {
 				System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));	
 				res.timeout = true;
 				return res;
+			} catch (IOException e) {
+				System.err.println(Globals.getErrorMessage("PacketHandler", "oops... the connection broke"));
+				e.printStackTrace();
+				System.exit(-1);
 			}
 			
 			// if the packet was received from another source
@@ -100,12 +105,17 @@ public class PacketHandler {
 					
 					// if different block number is received then send error packet with error code 4
 					// reset the received tftp packet to null and listen for new packets again
-					if (ackPacket.getBlockNumber() != expectedBlockNumber) {
-						String errorMessage = String.format("unexpected ACK packet block number received. Expected: %d, Received: %d", expectedBlockNumber, ackPacket.getBlockNumber());
+					if (ackPacket.getBlockNumber() < expectedBlockNumber) {
+						String errorMessage = String.format("duplicate ACK packet block number received. Expected: %d, Received: %d", expectedBlockNumber, ackPacket.getBlockNumber());
 						System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
-						errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
+						//errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
 						receivePacket = null;
 						continue;
+					}
+					else if (ackPacket.getBlockNumber() > expectedBlockNumber) {
+						String errorMessage = String.format("incorrect ACK packet block number received. Expected: %d, Received: %d", expectedBlockNumber, ackPacket.getBlockNumber());
+						System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
+						errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
 					}
 					
 				} catch(TFTPPacketParsingError e) {
@@ -117,6 +127,8 @@ public class PacketHandler {
 				
 				System.out.println(Globals.getVerboseMessage("PacketHandler", 
 						String.format("received ACK packet %d from client %s%d", ackPacket.getBlockNumber(), remoteAddress, remotePort)));
+				
+				res.ackPacket = ackPacket;
 			}
 			else if (receivePacket.getPacketType() == TFTPPacketType.ERROR) {
 				// parse ERROR packet
@@ -136,6 +148,8 @@ public class PacketHandler {
 								remotePort, errorPacket.getErrorCode(), errorPacket.getErrorMessage())));
 			}
 			else {
+				System.out.println(receivePacket.getOPCode());
+				
 				// ssend error packet with error code 4
 				String errorMessage = "invalid TFTP packet";
 				System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
@@ -167,6 +181,10 @@ public class PacketHandler {
 				System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));	
 				res.timeout = true;
 				return res;
+			} catch (IOException e) {
+				System.err.println(Globals.getErrorMessage("PacketHandler", "oops... the connection broke"));
+				e.printStackTrace();
+				System.exit(-1);			
 			}
 			
 			// if the packet was received from another source
@@ -196,16 +214,23 @@ public class PacketHandler {
 				}
 				
 				// if different block number is received then send error packet with error code 4
-				if (dataPacket.getBlockNumber() != expectedBlockNumber) {
-					String errorMessage = String.format("unexpected DATA packet block number received. Expected: %d, Received: %d", expectedBlockNumber, dataPacket.getBlockNumber());
+				if (dataPacket.getBlockNumber() < expectedBlockNumber) {
+					String errorMessage = String.format("duplicate DATA packet block number received. Expected: %d, Received: %d", expectedBlockNumber, dataPacket.getBlockNumber());
 					System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
-					errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
+					//errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
 					receivePacket = null;
 					continue;
+				}
+				else if (dataPacket.getBlockNumber() > expectedBlockNumber) {
+					String errorMessage = String.format("incorrect ACK packet block number received. Expected: %d, Received: %d", expectedBlockNumber, dataPacket.getBlockNumber());
+					System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
+					errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
 				}
 				
 				System.out.println(Globals.getVerboseMessage("PacketHandler", 
 						String.format("received DATA packet %d from client %s%d", dataPacket.getBlockNumber(), remoteAddress, remotePort)));
+				
+				res.dataPacket = dataPacket;
 			}
 			else if (receivePacket.getPacketType() == TFTPPacketType.ERROR) {
 				// parse ERROR packet
@@ -225,6 +250,8 @@ public class PacketHandler {
 								remotePort, errorPacket.getErrorCode(), errorPacket.getErrorMessage())));
 			}
 			else {
+				System.out.println(receivePacket.getOPCode());
+				
 				// send error packet with error code 4
 				String errorMessage = "invalid DATA sent";
 				System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));

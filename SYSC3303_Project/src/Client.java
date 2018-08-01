@@ -24,7 +24,8 @@ public class Client {
     */
    public Client()
    {
-	   tftpSocket = new TFTPSocket(0);
+	   //tftpSocket = new TFTPSocket(0);
+	   tftpSocket = new TFTPSocket(NetworkConfig.TIMEOUT_TIME);
 	   errorHandler =  new  ErrorHandler(tftpSocket);
 
 	   
@@ -128,9 +129,6 @@ public class Client {
         	
 	        // gets the data bytes from the DATA packet and converts it into a string
         	byte[] fileData = dataPacket.getDataBytes();
-	        String fileDataStr = ByteConversions.bytesToString(fileData);
-	        
-	        System.out.println(Globals.getVerboseMessage("Client", String.format("received file data: %s", fileDataStr)));
 	        
 	        // write file on client side
             fmRes = fileManager.writeFile(fileName, fileData);           
@@ -158,11 +156,11 @@ public class Client {
     }
     
     /**
-        * Handle sending DATA packets to server 
-        * 
-        * @param filePath path of the file client wants to write to
-        * @param mode     mode of the request
-        */
+    * Handle sending DATA packets to server 
+    * 
+    * @param filePath path of the file client wants to write to
+    * @param mode     mode of the request
+    */
     public void writeFile(String filePath, String mode) {
         // get file name from file path
         String fileName = Paths.get(filePath).getFileName().toString();
@@ -179,8 +177,6 @@ public class Client {
         
         packetHandler = new PacketHandler(tftpSocket, errorHandler, serverAddress, serverPort);
         
-        
-        
         ACKPacket ackPacket = packetHandler.receiveACKPacket((short) 0);
         
         if (ackPacket == null) {
@@ -188,9 +184,9 @@ public class Client {
         }
         
         if (ackPacket.getBlockNumber() == 0) {
-
 	        // reads a file on client side to create on the server side
         	FileManager.FileManagerResult res = fileManager.readFile(filePath);
+        	
     		byte[] fileData = null;
     		
     		if (!res.error) {
