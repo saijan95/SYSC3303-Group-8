@@ -39,7 +39,7 @@ public class ErrorSimulator implements Runnable {
 		serverThreadPort = NetworkConfig.SERVER_PORT;
 		
 		// create a datagram socket to establish a connection with incoming
-		tftpSocket = new TFTPSocket(NetworkConfig.PROXY_PORT);
+		tftpSocket = new TFTPSocket(0, NetworkConfig.PROXY_PORT);
 		
 		// send packet to server from client
 		sendingToServer = true;
@@ -70,7 +70,7 @@ public class ErrorSimulator implements Runnable {
 		
 		System.out.println(Globals.getVerboseMessage("Error Simulator", "sending packet to server..."));
 		
-		TFTPPacket sendTFTPPacket;
+		TFTPPacket sendTFTPPacket = null;
 		try {
 			sendTFTPPacket = new TFTPPacket(tftpPacket.getPacketBytes(), 0, tftpPacket.getPacketBytes().length, this.serverThreadAddress, this.serverThreadPort);
 			tftpSocket.send(sendTFTPPacket);
@@ -84,7 +84,13 @@ public class ErrorSimulator implements Runnable {
 		
 		System.out.println(Globals.getVerboseMessage("Error Simulator", "waiting for packet from server..."));
 		
-		TFTPPacket receiveTFTPPacket = tftpSocket.receive();
+		TFTPPacket receiveTFTPPacket = null;
+		try {
+			receiveTFTPPacket = tftpSocket.receive();
+		} catch (SocketTimeoutException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		serverThreadAddress = receiveTFTPPacket.getRemoteAddress();
 		serverThreadPort = receiveTFTPPacket.getRemotePort();
 		return receiveTFTPPacket;
@@ -96,7 +102,12 @@ public class ErrorSimulator implements Runnable {
 			TFTPPacket receiveTFTPacket = null;
 			TFTPPacket sendTFTPPacket = null;			
 					
-			receiveTFTPacket = tftpSocket.receive();
+			try {
+				receiveTFTPacket = tftpSocket.receive();
+			} catch (SocketTimeoutException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
 			
 			if (receiveTFTPacket == null) {
 				continue;
@@ -145,7 +156,7 @@ public class ErrorSimulator implements Runnable {
 			}
 			
 			if (errorSelection == 3) {
-				TFTPSocket tempTFTPSocket = new TFTPSocket();
+				TFTPSocket tempTFTPSocket = new TFTPSocket(0);
 
 				
 				tempTFTPSocket.send(sendTFTPPacket);

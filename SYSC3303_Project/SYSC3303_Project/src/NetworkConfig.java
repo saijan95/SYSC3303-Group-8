@@ -9,4 +9,6 @@ public class NetworkConfig {
 	public static final int SERVER_PORT = 69;
 	public static final int DATAGRAM_PACKET_MAX_LEN = 516;
 	public static final int PROXY_PORT = 23;
+	public static final int TIMEOUT_TIME = 5000;
+	public static final int MAX_TRIES = 5;
 }

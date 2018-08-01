@@ -1,4 +1,5 @@
 import java.net.InetAddress;
+import java.net.SocketTimeoutException;
 
 /**
  * This class handles the packet sending and receiving
@@ -7,6 +8,12 @@ import java.net.InetAddress;
  *
  */
 public class PacketHandler {
+	public class PacketHandlerReturn {
+		public ACKPacket ackPacket = null;
+		public DATAPacket dataPacket = null;
+		public boolean timeout = false;
+	}
+	
 	private TFTPSocket tftpSocket;
 	private ErrorHandler errorHandler;
 	private InetAddress remoteAddress;
@@ -53,12 +60,21 @@ public class PacketHandler {
 	 * @param expectedBlockNumber
 	 * @return ACK packet or null if error occurred
 	 */
-	public ACKPacket receiveACKPacket(short expectedBlockNumber) {	
+	private PacketHandlerReturn recACKPacket(short expectedBlockNumber) {	
+		PacketHandlerReturn res = new PacketHandlerReturn();
+		
 		ACKPacket ackPacket = null;
 		
 		TFTPPacket receivePacket = null;
 		while (receivePacket == null) {
-			receivePacket = tftpSocket.receive();
+			try {
+				receivePacket = tftpSocket.receive();
+			} catch (SocketTimeoutException e) {
+				String errorMessage = "Socket timed out. Cannot receive ACK packet";
+				System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));	
+				res.timeout = true;
+				return res;
+			}
 			
 			// if the packet was received from another source
 			// then send error packet with error code 5
@@ -75,55 +91,61 @@ public class PacketHandler {
 				receivePacket = null;
 				continue;
 			}
-		}
-		
-		if (receivePacket.getPacketType() == TFTPPacketType.ACK) {
-			// parse ACK packet
-			try {
-				ackPacket = new ACKPacket(receivePacket);
-				
-				// if different block number is received then send error packet with error code 4
-				if (ackPacket.getBlockNumber() != expectedBlockNumber) {
-					String errorMessage = String.format("unexpected ACK packet block number received. Expected: %d, Received: %d", expectedBlockNumber, ackPacket.getBlockNumber());
+			
+			
+			if (receivePacket.getPacketType() == TFTPPacketType.ACK) {
+				// parse ACK packet
+				try {
+					ackPacket = new ACKPacket(receivePacket);
+					
+					// if different block number is received then send error packet with error code 4
+					// reset the received tftp packet to null and listen for new packets again
+					if (ackPacket.getBlockNumber() != expectedBlockNumber) {
+						String errorMessage = String.format("unexpected ACK packet block number received. Expected: %d, Received: %d", expectedBlockNumber, ackPacket.getBlockNumber());
+						System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
+						errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
+						receivePacket = null;
+						continue;
+					}
+					
+				} catch(TFTPPacketParsingError e) {
+					// send error packet with error code 4
+					String errorMessage = String.format("cannot parse ACK packet %d", expectedBlockNumber);
 					System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
 					errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
 				}
 				
-			} catch(TFTPPacketParsingError e) {
-				// send error packet with error code 4
-				String errorMessage = String.format("cannot parse ACK packet %d", expectedBlockNumber);
+				System.out.println(Globals.getVerboseMessage("PacketHandler", 
+						String.format("received ACK packet %d from client %s%d", ackPacket.getBlockNumber(), remoteAddress, remotePort)));
+			}
+			else if (receivePacket.getPacketType() == TFTPPacketType.ERROR) {
+				// parse ERROR packet
+				ERRORPacket errorPacket = null;
+				
+				try {
+					errorPacket = new ERRORPacket(receivePacket);
+				} catch (TFTPPacketParsingError e) {
+					// send error packet with error code 4
+					String errorMessage = "cannot parse ERROR packet";
+					System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
+					errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
+				}
+				
+				System.out.println(Globals.getVerboseMessage("PacketHandler", 
+						String.format("received ERROR packet from client %s%d, errorCode: %d, errorMessage: %s", remoteAddress, 
+								remotePort, errorPacket.getErrorCode(), errorPacket.getErrorMessage())));
+			}
+			else {
+				// ssend error packet with error code 4
+				String errorMessage = "invalid TFTP packet";
 				System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
 				errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
 			}
-			
-			System.out.println(Globals.getVerboseMessage("PacketHandler", 
-					String.format("received ACK packet %d from client %s%d", ackPacket.getBlockNumber(), remoteAddress, remotePort)));
-		}
-		else if (receivePacket.getPacketType() == TFTPPacketType.ERROR) {
-			// parse ERROR packet
-			ERRORPacket errorPacket = null;
-			
-			try {
-				errorPacket = new ERRORPacket(receivePacket);
-			} catch (TFTPPacketParsingError e) {
-				// send error packet with error code 4
-				String errorMessage = "cannot parse ERROR packet";
-				System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
-				errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
-			}
-			
-			System.out.println(Globals.getVerboseMessage("PacketHandler", 
-					String.format("received ERROR packet from client %s%d, errorCode: %d, errorMessage: %s", remoteAddress, 
-							remotePort, errorPacket.getErrorCode(), errorPacket.getErrorMessage())));
-		}
-		else {
-			// ssend error packet with error code 4
-			String errorMessage = "invalid TFTP packet";
-			System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
-			errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
 		}
 		
-		return ackPacket;
+		res.ackPacket = ackPacket;
+
+		return res;
 	}
 	
 	/**
@@ -132,12 +154,20 @@ public class PacketHandler {
 	 * @param expectedBlockNumber
 	 * @return DATA packet or null if error occurred
 	 */
-	public DATAPacket receiveDATAPacket(short expectedBlockNumber) {
+	private PacketHandlerReturn recDATAPacket(short expectedBlockNumber) {
+		PacketHandlerReturn res = new PacketHandlerReturn();
 		DATAPacket dataPacket = null;
 		
 		TFTPPacket receivePacket = null;
 		while (receivePacket == null) {
-			receivePacket = tftpSocket.receive();
+			try {
+				receivePacket = tftpSocket.receive();
+			} catch (SocketTimeoutException e) {
+				String errorMessage = "Socket timed out. Cannot receive DATA packet";
+				System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));	
+				res.timeout = true;
+				return res;
+			}
 			
 			// if the packet was received from another source
 			// then send error packet with error code 5
@@ -150,55 +180,117 @@ public class PacketHandler {
 				// send error packet to the wrong source
 				System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));	
 				errorHandler.sendUnknownTrasnferIDErrorPacket(errorMessage, receivePacket.getRemoteAddress(), receivePacket.getRemotePort());
-				return null;
-			}
-		}
-			
-		if (receivePacket.getPacketType() == TFTPPacketType.DATA) {
-			// parse DATA packet
-			
-			try {
-				dataPacket = new DATAPacket(receivePacket);
-			} catch(TFTPPacketParsingError e) {
-				String errorMessage = String.format("cannot parse DATA packet %d", expectedBlockNumber);
-				System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
-				errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
+				receivePacket = null;
+				continue;
 			}
 			
-			// if different block number is received then send error packet with error code 4
-			if (dataPacket.getBlockNumber() != expectedBlockNumber) {
-				String errorMessage = String.format("unexpected DATA packet block number received. Expected: %d, Received: %d", expectedBlockNumber, dataPacket.getBlockNumber());
-				System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
-				errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
+			if (receivePacket.getPacketType() == TFTPPacketType.DATA) {
+				// parse DATA packet
+				
+				try {
+					dataPacket = new DATAPacket(receivePacket);
+				} catch(TFTPPacketParsingError e) {
+					String errorMessage = String.format("cannot parse DATA packet %d", expectedBlockNumber);
+					System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
+					errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
+				}
+				
+				// if different block number is received then send error packet with error code 4
+				if (dataPacket.getBlockNumber() != expectedBlockNumber) {
+					String errorMessage = String.format("unexpected DATA packet block number received. Expected: %d, Received: %d", expectedBlockNumber, dataPacket.getBlockNumber());
+					System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
+					errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
+					receivePacket = null;
+					continue;
+				}
+				
+				System.out.println(Globals.getVerboseMessage("PacketHandler", 
+						String.format("received DATA packet %d from client %s%d", dataPacket.getBlockNumber(), remoteAddress, remotePort)));
 			}
-			
-			System.out.println(Globals.getVerboseMessage("PacketHandler", 
-					String.format("received DATA packet %d from client %s%d", dataPacket.getBlockNumber(), remoteAddress, remotePort)));
-		}
-		else if (receivePacket.getPacketType() == TFTPPacketType.ERROR) {
-			// parse ERROR packet
-			ERRORPacket errorPacket = null;
-			
-			try {
-				errorPacket = new ERRORPacket(receivePacket);
-			} catch (TFTPPacketParsingError e) {
+			else if (receivePacket.getPacketType() == TFTPPacketType.ERROR) {
+				// parse ERROR packet
+				ERRORPacket errorPacket = null;
+				
+				try {
+					errorPacket = new ERRORPacket(receivePacket);
+				} catch (TFTPPacketParsingError e) {
+					// send error packet with error code 4
+					String errorMessage = "cannot parse ERROR packet";
+					System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
+					errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
+				}
+				
+				System.out.println(Globals.getVerboseMessage("PacketHandler", 
+						String.format("received ERROR packet from client %s%d, errorCode: %d, errorMessage: %s", remoteAddress, 
+								remotePort, errorPacket.getErrorCode(), errorPacket.getErrorMessage())));
+			}
+			else {
 				// send error packet with error code 4
-				String errorMessage = "cannot parse ERROR packet";
+				String errorMessage = "invalid DATA sent";
 				System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
 				errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
 			}
-			
-			System.out.println(Globals.getVerboseMessage("PacketHandler", 
-					String.format("received ERROR packet from client %s%d, errorCode: %d, errorMessage: %s", remoteAddress, 
-							remotePort, errorPacket.getErrorCode(), errorPacket.getErrorMessage())));
-		}
-		else {
-			// send error packet with error code 4
-			String errorMessage = "invalid DATA sent";
-			System.err.println(Globals.getErrorMessage("PacketHandler", errorMessage));
-			errorHandler.sendIllegalOperationErrorPacket(errorMessage, remoteAddress, remotePort);
 		}
 		
-		return dataPacket;
+		return res	;
+	}
+	
+	public DATAPacket receiveDATAPacket(short blockNumber) {
+		PacketHandlerReturn phRes = null;
+		
+		int numberOfTries = 1; 
+    	while (numberOfTries < NetworkConfig.MAX_TRIES) {
+    		phRes = recDATAPacket(blockNumber);
+    		numberOfTries++;
+    		
+    		if (!phRes.timeout)
+    			break;
+    	}
+    	
+    	if (numberOfTries == NetworkConfig.MAX_TRIES) {
+    		System.err.println(Globals.getErrorMessage("Client", "max tries reached. Exitting connection"));
+    	}
+    	
+    	return phRes.dataPacket;
+	}
+	
+	public ACKPacket receiveACKPacket(short expectedBlockNumber) {
+		PacketHandlerReturn phRes = null;
+		
+		int numberOfTries = 1;
+		while (numberOfTries < NetworkConfig.MAX_TRIES) {
+			phRes = recACKPacket(expectedBlockNumber);
+			numberOfTries++;
+			
+			if (!phRes.timeout)
+				break;
+		}
+		
+		if (numberOfTries == NetworkConfig.MAX_TRIES) {
+        	System.err.println(Globals.getErrorMessage("Client", "max tries reached. Exitting connection"));
+        }
+		
+		return phRes.ackPacket;
+	}
+	
+	public ACKPacket receiveACKPacket(DATAPacket sentDataPacket) {
+		PacketHandlerReturn phRes = null;
+		
+		int numberOfTries = 1;
+		while (numberOfTries < NetworkConfig.MAX_TRIES) {
+			phRes = recACKPacket(sentDataPacket.getBlockNumber());
+			numberOfTries++;
+			
+			if (!phRes.timeout)
+				break;
+			else
+				sendDATAPacket(sentDataPacket);
+		}
+		
+		if (numberOfTries == NetworkConfig.MAX_TRIES) {
+        	System.err.println(Globals.getErrorMessage("Client", "max tries reached. Exitting connection"));
+        }
+		
+		return phRes.ackPacket;
 	}
 }
